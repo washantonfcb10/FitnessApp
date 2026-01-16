@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import {
   View,
   Text,
@@ -7,8 +7,10 @@ import {
   TouchableOpacity,
   RefreshControl,
   Alert,
+  Animated,
 } from 'react-native';
 import { useRouter, useFocusEffect } from 'expo-router';
+import { Swipeable } from 'react-native-gesture-handler';
 import { getAllRoutines, deleteRoutine, startWorkout } from '../../src/lib/database';
 import { useWorkoutStore } from '../../src/stores/workoutStore';
 import type { RoutineTemplate } from '../../src/types';
@@ -18,6 +20,7 @@ export default function RoutinesScreen() {
   const [routines, setRoutines] = useState<RoutineTemplate[]>([]);
   const [refreshing, setRefreshing] = useState(false);
   const { activeWorkoutId, startWorkout: startWorkoutState } = useWorkoutStore();
+  const swipeableRefs = useRef<Map<string, Swipeable>>(new Map());
 
   const loadRoutines = useCallback(async () => {
     try {
@@ -105,23 +108,95 @@ export default function RoutinesScreen() {
     });
   };
 
-  const renderRoutineItem = ({ item }: { item: RoutineTemplate }) => (
-    <TouchableOpacity
-      style={styles.routineCard}
-      onPress={() => router.push(`/routine/${item.id}`)}
-      onLongPress={() => handleDeleteRoutine(item)}
-    >
-      <View style={styles.routineInfo}>
-        <Text style={styles.routineName}>{item.name}</Text>
-        <Text style={styles.routineDate}>Updated {formatDate(item.updatedAt)}</Text>
-      </View>
+  const closeSwipeable = (id: string) => {
+    const ref = swipeableRefs.current.get(id);
+    ref?.close();
+  };
+
+  const renderLeftActions = (
+    progress: Animated.AnimatedInterpolation<number>,
+    dragX: Animated.AnimatedInterpolation<number>,
+    item: RoutineTemplate
+  ) => {
+    const scale = dragX.interpolate({
+      inputRange: [0, 80],
+      outputRange: [0.5, 1],
+      extrapolate: 'clamp',
+    });
+
+    return (
       <TouchableOpacity
-        style={styles.startButton}
-        onPress={() => handleStartWorkout(item)}
+        style={styles.editAction}
+        onPress={() => {
+          closeSwipeable(item.id);
+          router.push(`/routine/${item.id}`);
+        }}
       >
-        <Text style={styles.startButtonText}>Start</Text>
+        <Animated.Text style={[styles.actionText, { transform: [{ scale }] }]}>
+          Edit
+        </Animated.Text>
       </TouchableOpacity>
-    </TouchableOpacity>
+    );
+  };
+
+  const renderRightActions = (
+    progress: Animated.AnimatedInterpolation<number>,
+    dragX: Animated.AnimatedInterpolation<number>,
+    item: RoutineTemplate
+  ) => {
+    const scale = dragX.interpolate({
+      inputRange: [-80, 0],
+      outputRange: [1, 0.5],
+      extrapolate: 'clamp',
+    });
+
+    return (
+      <TouchableOpacity
+        style={styles.deleteAction}
+        onPress={() => {
+          closeSwipeable(item.id);
+          handleDeleteRoutine(item);
+        }}
+      >
+        <Animated.Text style={[styles.actionText, { transform: [{ scale }] }]}>
+          Delete
+        </Animated.Text>
+      </TouchableOpacity>
+    );
+  };
+
+  const renderRoutineItem = ({ item }: { item: RoutineTemplate }) => (
+    <Swipeable
+      ref={(ref) => {
+        if (ref) {
+          swipeableRefs.current.set(item.id, ref);
+        } else {
+          swipeableRefs.current.delete(item.id);
+        }
+      }}
+      renderLeftActions={(progress, dragX) => renderLeftActions(progress, dragX, item)}
+      renderRightActions={(progress, dragX) => renderRightActions(progress, dragX, item)}
+      overshootLeft={false}
+      overshootRight={false}
+      friction={2}
+    >
+      <TouchableOpacity
+        style={styles.routineCard}
+        onPress={() => router.push(`/routine/${item.id}`)}
+        activeOpacity={0.7}
+      >
+        <View style={styles.routineInfo}>
+          <Text style={styles.routineName}>{item.name}</Text>
+          <Text style={styles.routineDate}>Updated {formatDate(item.updatedAt)}</Text>
+        </View>
+        <TouchableOpacity
+          style={styles.startButton}
+          onPress={() => handleStartWorkout(item)}
+        >
+          <Text style={styles.startButtonText}>Start</Text>
+        </TouchableOpacity>
+      </TouchableOpacity>
+    </Swipeable>
   );
 
   const renderEmptyState = () => (
@@ -274,6 +349,29 @@ const styles = StyleSheet.create({
   },
   bannerAction: {
     color: '#FFFFFF',
+    fontSize: 15,
+  },
+  editAction: {
+    backgroundColor: '#007AFF',
+    justifyContent: 'center',
+    alignItems: 'center',
+    width: 80,
+    marginBottom: 12,
+    borderTopLeftRadius: 12,
+    borderBottomLeftRadius: 12,
+  },
+  deleteAction: {
+    backgroundColor: '#FF3B30',
+    justifyContent: 'center',
+    alignItems: 'center',
+    width: 80,
+    marginBottom: 12,
+    borderTopRightRadius: 12,
+    borderBottomRightRadius: 12,
+  },
+  actionText: {
+    color: '#FFFFFF',
+    fontWeight: '600',
     fontSize: 15,
   },
 });

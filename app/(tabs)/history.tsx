@@ -6,14 +6,26 @@ import {
   ScrollView,
   TouchableOpacity,
   ActivityIndicator,
+  Modal,
+  FlatList,
+  Alert,
 } from 'react-native';
-import { useFocusEffect } from 'expo-router';
+import { useFocusEffect, useRouter } from 'expo-router';
 import { Calendar, DateData } from 'react-native-calendars';
 import {
   getWorkoutDates,
   getWorkoutSummariesForDate,
+  getScheduledDates,
+  getScheduledWorkoutsForDate,
+  scheduleWorkout,
+  deleteScheduledWorkout,
+  getAllRoutines,
+  startWorkout,
   WorkoutSummary,
+  ScheduledWorkout,
 } from '../../src/lib/database';
+import { useWorkoutStore } from '../../src/stores/workoutStore';
+import type { RoutineTemplate } from '../../src/types';
 
 type MarkedDates = {
   [date: string]: {
@@ -21,20 +33,31 @@ type MarkedDates = {
     dotColor?: string;
     selected?: boolean;
     selectedColor?: string;
+    dots?: { key: string; color: string }[];
   };
 };
 
 export default function HistoryScreen() {
+  const router = useRouter();
+  const { activeWorkoutId, startWorkout: startWorkoutState } = useWorkoutStore();
   const [workoutDates, setWorkoutDates] = useState<string[]>([]);
+  const [scheduledDates, setScheduledDates] = useState<string[]>([]);
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
   const [selectedWorkouts, setSelectedWorkouts] = useState<WorkoutSummary[]>([]);
+  const [selectedScheduled, setSelectedScheduled] = useState<ScheduledWorkout[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadingWorkouts, setLoadingWorkouts] = useState(false);
+  const [showRoutinePicker, setShowRoutinePicker] = useState(false);
+  const [routines, setRoutines] = useState<RoutineTemplate[]>([]);
 
   const loadWorkoutDates = useCallback(async () => {
     try {
-      const dates = await getWorkoutDates();
+      const [dates, scheduled] = await Promise.all([
+        getWorkoutDates(),
+        getScheduledDates(),
+      ]);
       setWorkoutDates(dates);
+      setScheduledDates(scheduled);
     } catch (error) {
       console.error('Failed to load workout dates:', error);
     } finally {
@@ -51,11 +74,16 @@ export default function HistoryScreen() {
   const loadWorkoutsForDate = useCallback(async (date: string) => {
     setLoadingWorkouts(true);
     try {
-      const summaries = await getWorkoutSummariesForDate(date);
+      const [summaries, scheduled] = await Promise.all([
+        getWorkoutSummariesForDate(date),
+        getScheduledWorkoutsForDate(date),
+      ]);
       setSelectedWorkouts(summaries);
+      setSelectedScheduled(scheduled);
     } catch (error) {
       console.error('Failed to load workouts for date:', error);
       setSelectedWorkouts([]);
+      setSelectedScheduled([]);
     } finally {
       setLoadingWorkouts(false);
     }
@@ -68,6 +96,7 @@ export default function HistoryScreen() {
         // Deselect
         setSelectedDate(null);
         setSelectedWorkouts([]);
+        setSelectedScheduled([]);
       } else {
         setSelectedDate(dateStr);
         loadWorkoutsForDate(dateStr);
@@ -76,16 +105,99 @@ export default function HistoryScreen() {
     [selectedDate, loadWorkoutsForDate]
   );
 
+  const openRoutinePicker = async () => {
+    try {
+      const allRoutines = await getAllRoutines();
+      setRoutines(allRoutines);
+      setShowRoutinePicker(true);
+    } catch (error) {
+      console.error('Failed to load routines:', error);
+    }
+  };
+
+  const handleScheduleRoutine = async (routine: RoutineTemplate) => {
+    if (!selectedDate) return;
+    try {
+      await scheduleWorkout(routine.id, selectedDate);
+      setShowRoutinePicker(false);
+      await loadWorkoutsForDate(selectedDate);
+      await loadWorkoutDates();
+    } catch (error) {
+      console.error('Failed to schedule workout:', error);
+      Alert.alert('Error', 'Failed to schedule workout');
+    }
+  };
+
+  const handleDeleteScheduled = async (scheduled: ScheduledWorkout) => {
+    Alert.alert(
+      'Remove Scheduled Workout',
+      `Remove "${scheduled.routineName}" from this day?`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Remove',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await deleteScheduledWorkout(scheduled.id);
+              if (selectedDate) {
+                await loadWorkoutsForDate(selectedDate);
+                await loadWorkoutDates();
+              }
+            } catch (error) {
+              console.error('Failed to delete scheduled workout:', error);
+            }
+          },
+        },
+      ]
+    );
+  };
+
+  const handleStartScheduled = async (scheduled: ScheduledWorkout) => {
+    if (activeWorkoutId) {
+      Alert.alert(
+        'Workout in Progress',
+        'You already have an active workout. Would you like to continue it?',
+        [
+          { text: 'Continue', onPress: () => router.push(`/workout/${activeWorkoutId}`) },
+          { text: 'Cancel', style: 'cancel' },
+        ]
+      );
+      return;
+    }
+
+    try {
+      const workoutId = await startWorkout(scheduled.routineTemplateId);
+      startWorkoutState(workoutId, scheduled.routineName, scheduled.routineTemplateId);
+      // Delete from scheduled since we're starting it
+      await deleteScheduledWorkout(scheduled.id);
+      router.push(`/workout/${workoutId}`);
+    } catch (error) {
+      console.error('Failed to start workout:', error);
+      Alert.alert('Error', 'Failed to start workout');
+    }
+  };
+
   // Build marked dates object for the calendar
   const markedDates = useMemo((): MarkedDates => {
     const marked: MarkedDates = {};
 
-    // Mark all dates with workouts
+    // Mark all dates with completed workouts (green)
     workoutDates.forEach((date) => {
       marked[date] = {
         marked: true,
         dotColor: '#34C759',
       };
+    });
+
+    // Mark scheduled dates (blue) - override if no completed workout
+    scheduledDates.forEach((date) => {
+      if (!marked[date]) {
+        marked[date] = {
+          marked: true,
+          dotColor: '#007AFF',
+        };
+      }
     });
 
     // Highlight selected date
@@ -98,7 +210,7 @@ export default function HistoryScreen() {
     }
 
     return marked;
-  }, [workoutDates, selectedDate]);
+  }, [workoutDates, scheduledDates, selectedDate]);
 
   const formatDuration = (seconds: number): string => {
     if (seconds < 60) return `${seconds}s`;
@@ -183,12 +295,18 @@ export default function HistoryScreen() {
 
       {/* Legend */}
       <View style={styles.legend}>
-        <View style={styles.legendItem}>
-          <View style={[styles.legendDot, { backgroundColor: '#34C759' }]} />
-          <Text style={styles.legendText}>Workout completed</Text>
+        <View style={styles.legendRow}>
+          <View style={styles.legendItem}>
+            <View style={[styles.legendDot, { backgroundColor: '#34C759' }]} />
+            <Text style={styles.legendText}>Completed</Text>
+          </View>
+          <View style={styles.legendItem}>
+            <View style={[styles.legendDot, { backgroundColor: '#007AFF' }]} />
+            <Text style={styles.legendText}>Scheduled</Text>
+          </View>
         </View>
         <Text style={styles.workoutCount}>
-          {workoutDates.length} total workout{workoutDates.length !== 1 ? 's' : ''}
+          {workoutDates.length} workout{workoutDates.length !== 1 ? 's' : ''}
         </Text>
       </View>
 
@@ -203,44 +321,94 @@ export default function HistoryScreen() {
             <View style={styles.loadingContainer}>
               <ActivityIndicator size="small" color="#007AFF" />
             </View>
-          ) : selectedWorkouts.length === 0 ? (
-            <View style={styles.noWorkoutsContainer}>
-              <Text style={styles.noWorkoutsText}>No workouts on this day</Text>
-            </View>
           ) : (
-            selectedWorkouts.map((workout) => (
-              <View key={workout.id} style={styles.workoutCard}>
-                <View style={styles.workoutHeader}>
-                  <Text style={styles.workoutName}>{workout.name}</Text>
-                  <Text style={styles.workoutTime}>
-                    {formatTime(workout.startedAt)}
-                  </Text>
+            <>
+              {/* Scheduled Workouts */}
+              {selectedScheduled.length > 0 && (
+                <View style={styles.scheduledSection}>
+                  <Text style={styles.sectionLabel}>SCHEDULED</Text>
+                  {selectedScheduled.map((scheduled) => (
+                    <View key={scheduled.id} style={styles.scheduledCard}>
+                      <View style={styles.scheduledInfo}>
+                        <View style={styles.scheduledBadge}>
+                          <Text style={styles.scheduledBadgeText}>PLANNED</Text>
+                        </View>
+                        <Text style={styles.scheduledName}>{scheduled.routineName}</Text>
+                      </View>
+                      <View style={styles.scheduledActions}>
+                        <TouchableOpacity
+                          style={styles.startScheduledButton}
+                          onPress={() => handleStartScheduled(scheduled)}
+                        >
+                          <Text style={styles.startScheduledText}>Start</Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                          style={styles.deleteScheduledButton}
+                          onPress={() => handleDeleteScheduled(scheduled)}
+                        >
+                          <Text style={styles.deleteScheduledText}>✕</Text>
+                        </TouchableOpacity>
+                      </View>
+                    </View>
+                  ))}
                 </View>
+              )}
 
-                <View style={styles.statsGrid}>
-                  <View style={styles.statItem}>
-                    <Text style={styles.statValue}>
-                      {formatDuration(workout.duration)}
-                    </Text>
-                    <Text style={styles.statLabel}>Duration</Text>
-                  </View>
-                  <View style={styles.statItem}>
-                    <Text style={styles.statValue}>
-                      {formatVolume(workout.totalVolume)}
-                    </Text>
-                    <Text style={styles.statLabel}>Volume</Text>
-                  </View>
-                  <View style={styles.statItem}>
-                    <Text style={styles.statValue}>{workout.totalSets}</Text>
-                    <Text style={styles.statLabel}>Sets</Text>
-                  </View>
-                  <View style={styles.statItem}>
-                    <Text style={styles.statValue}>{workout.exerciseCount}</Text>
-                    <Text style={styles.statLabel}>Exercises</Text>
-                  </View>
+              {/* Completed Workouts */}
+              {selectedWorkouts.length > 0 && (
+                <View style={styles.completedSection}>
+                  <Text style={styles.sectionLabel}>COMPLETED</Text>
+                  {selectedWorkouts.map((workout) => (
+                    <View key={workout.id} style={styles.workoutCard}>
+                      <View style={styles.workoutHeader}>
+                        <Text style={styles.workoutName}>{workout.name}</Text>
+                        <Text style={styles.workoutTime}>
+                          {formatTime(workout.startedAt)}
+                        </Text>
+                      </View>
+
+                      <View style={styles.statsGrid}>
+                        <View style={styles.statItem}>
+                          <Text style={styles.statValue}>
+                            {formatDuration(workout.duration)}
+                          </Text>
+                          <Text style={styles.statLabel}>Duration</Text>
+                        </View>
+                        <View style={styles.statItem}>
+                          <Text style={styles.statValue}>
+                            {formatVolume(workout.totalVolume)}
+                          </Text>
+                          <Text style={styles.statLabel}>Volume</Text>
+                        </View>
+                        <View style={styles.statItem}>
+                          <Text style={styles.statValue}>{workout.totalSets}</Text>
+                          <Text style={styles.statLabel}>Sets</Text>
+                        </View>
+                        <View style={styles.statItem}>
+                          <Text style={styles.statValue}>{workout.exerciseCount}</Text>
+                          <Text style={styles.statLabel}>Exercises</Text>
+                        </View>
+                      </View>
+                    </View>
+                  ))}
                 </View>
-              </View>
-            ))
+              )}
+
+              {/* No workouts message */}
+              {selectedWorkouts.length === 0 && selectedScheduled.length === 0 && (
+                <View style={styles.noWorkoutsContainer}>
+                  <Text style={styles.noWorkoutsText}>No workouts on this day</Text>
+                </View>
+              )}
+
+              {/* Schedule button */}
+              <TouchableOpacity
+                style={styles.scheduleButton}
+                onPress={openRoutinePicker}
+              >
+                <Text style={styles.scheduleButtonText}>+ Schedule Routine</Text>
+              </TouchableOpacity>
+            </>
           )}
         </View>
       )}
@@ -264,6 +432,53 @@ export default function HistoryScreen() {
           </Text>
         </View>
       )}
+
+      {/* Routine Picker Modal */}
+      <Modal
+        visible={showRoutinePicker}
+        animationType="slide"
+        presentationStyle="pageSheet"
+        onRequestClose={() => setShowRoutinePicker(false)}
+      >
+        <View style={styles.modalContainer}>
+          <View style={styles.modalHeader}>
+            <TouchableOpacity onPress={() => setShowRoutinePicker(false)}>
+              <Text style={styles.modalCancel}>Cancel</Text>
+            </TouchableOpacity>
+            <Text style={styles.modalTitle}>Schedule Routine</Text>
+            <View style={{ width: 60 }} />
+          </View>
+
+          {selectedDate && (
+            <View style={styles.modalDateBanner}>
+              <Text style={styles.modalDateText}>
+                {formatDateHeader(selectedDate)}
+              </Text>
+            </View>
+          )}
+
+          <FlatList
+            data={routines}
+            keyExtractor={(item) => item.id}
+            renderItem={({ item }) => (
+              <TouchableOpacity
+                style={styles.routinePickerItem}
+                onPress={() => handleScheduleRoutine(item)}
+              >
+                <Text style={styles.routinePickerName}>{item.name}</Text>
+              </TouchableOpacity>
+            )}
+            contentContainerStyle={styles.routinePickerList}
+            ListEmptyComponent={
+              <View style={styles.emptyRoutines}>
+                <Text style={styles.emptyRoutinesText}>
+                  No routines yet. Create one first!
+                </Text>
+              </View>
+            }
+          />
+        </View>
+      </Modal>
     </ScrollView>
   );
 }
@@ -303,6 +518,10 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingVertical: 12,
   },
+  legendRow: {
+    flexDirection: 'row',
+    gap: 16,
+  },
   legendItem: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -311,7 +530,7 @@ const styles = StyleSheet.create({
     width: 8,
     height: 8,
     borderRadius: 4,
-    marginRight: 8,
+    marginRight: 6,
   },
   legendText: {
     fontSize: 13,
@@ -415,6 +634,146 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   emptySubtitle: {
+    fontSize: 15,
+    color: '#8E8E93',
+    textAlign: 'center',
+  },
+  scheduledSection: {
+    marginBottom: 16,
+  },
+  completedSection: {
+    marginBottom: 16,
+  },
+  sectionLabel: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#8E8E93',
+    letterSpacing: 0.5,
+    marginBottom: 8,
+  },
+  scheduledCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 12,
+    padding: 14,
+    marginBottom: 8,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    borderLeftWidth: 4,
+    borderLeftColor: '#007AFF',
+  },
+  scheduledInfo: {
+    flex: 1,
+  },
+  scheduledBadge: {
+    backgroundColor: '#007AFF15',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 4,
+    alignSelf: 'flex-start',
+    marginBottom: 4,
+  },
+  scheduledBadgeText: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: '#007AFF',
+    letterSpacing: 0.5,
+  },
+  scheduledName: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#000000',
+  },
+  scheduledActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  startScheduledButton: {
+    backgroundColor: '#34C759',
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 8,
+  },
+  startScheduledText: {
+    color: '#FFFFFF',
+    fontWeight: '600',
+    fontSize: 14,
+  },
+  deleteScheduledButton: {
+    padding: 8,
+  },
+  deleteScheduledText: {
+    fontSize: 18,
+    color: '#FF3B30',
+  },
+  scheduleButton: {
+    borderWidth: 2,
+    borderColor: '#007AFF',
+    borderStyle: 'dashed',
+    borderRadius: 12,
+    padding: 14,
+    alignItems: 'center',
+    marginTop: 8,
+  },
+  scheduleButtonText: {
+    color: '#007AFF',
+    fontSize: 15,
+    fontWeight: '600',
+  },
+  modalContainer: {
+    flex: 1,
+    backgroundColor: '#F2F2F7',
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 16,
+    backgroundColor: '#FFFFFF',
+    borderBottomWidth: 1,
+    borderBottomColor: '#E5E5EA',
+  },
+  modalCancel: {
+    fontSize: 17,
+    color: '#007AFF',
+  },
+  modalTitle: {
+    fontSize: 17,
+    fontWeight: '600',
+    color: '#000000',
+  },
+  modalDateBanner: {
+    backgroundColor: '#007AFF',
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+  },
+  modalDateText: {
+    color: '#FFFFFF',
+    fontSize: 15,
+    fontWeight: '600',
+    textAlign: 'center',
+  },
+  routinePickerList: {
+    padding: 16,
+  },
+  routinePickerItem: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 8,
+  },
+  routinePickerName: {
+    fontSize: 17,
+    fontWeight: '500',
+    color: '#000000',
+  },
+  emptyRoutines: {
+    padding: 32,
+    alignItems: 'center',
+  },
+  emptyRoutinesText: {
     fontSize: 15,
     color: '#8E8E93',
     textAlign: 'center',

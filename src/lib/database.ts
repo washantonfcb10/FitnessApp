@@ -110,11 +110,21 @@ export async function initDatabase(): Promise<SQLite.SQLiteDatabase> {
       FOREIGN KEY (workout_exercise_id) REFERENCES workout_exercises(id) ON DELETE CASCADE
     );
 
+    -- Scheduled workouts for calendar planning
+    CREATE TABLE IF NOT EXISTS scheduled_workouts (
+      id TEXT PRIMARY KEY,
+      routine_template_id TEXT NOT NULL,
+      scheduled_date TEXT NOT NULL,
+      created_at INTEGER NOT NULL,
+      FOREIGN KEY (routine_template_id) REFERENCES routine_templates(id) ON DELETE CASCADE
+    );
+
     -- Indexes for performance
     CREATE INDEX IF NOT EXISTS idx_workout_exercises_exercise_id ON workout_exercises(exercise_id);
     CREATE INDEX IF NOT EXISTS idx_workout_sessions_started ON workout_sessions(started_at DESC);
     CREATE INDEX IF NOT EXISTS idx_workout_sets_completed ON workout_sets(completed_at DESC);
     CREATE INDEX IF NOT EXISTS idx_routine_exercises_template ON routine_exercises(routine_template_id);
+    CREATE INDEX IF NOT EXISTS idx_scheduled_workouts_date ON scheduled_workouts(scheduled_date);
   `);
 
   // Seed default exercises if empty
@@ -637,4 +647,80 @@ export async function getWorkoutSummariesForDate(dateString: string): Promise<Wo
     workouts.map((w) => getWorkoutSummary(w.id))
   );
   return summaries.filter((s): s is WorkoutSummary => s !== null);
+}
+
+// ==================== SCHEDULED WORKOUTS ====================
+
+export interface ScheduledWorkout {
+  id: string;
+  routineTemplateId: string;
+  routineName: string;
+  scheduledDate: string;
+  createdAt: number;
+}
+
+export async function scheduleWorkout(
+  routineTemplateId: string,
+  scheduledDate: string
+): Promise<string> {
+  const database = getDatabase();
+  const id = uuidv4();
+  const now = Date.now();
+
+  await database.runAsync(
+    `INSERT INTO scheduled_workouts (id, routine_template_id, scheduled_date, created_at)
+     VALUES (?, ?, ?, ?)`,
+    [id, routineTemplateId, scheduledDate, now]
+  );
+
+  return id;
+}
+
+export async function getScheduledWorkoutsForDate(
+  dateString: string
+): Promise<ScheduledWorkout[]> {
+  const database = getDatabase();
+
+  const rows = await database.getAllAsync<{
+    id: string;
+    routine_template_id: string;
+    scheduled_date: string;
+    created_at: number;
+    routine_name: string;
+  }>(
+    `SELECT sw.*, rt.name as routine_name
+     FROM scheduled_workouts sw
+     JOIN routine_templates rt ON sw.routine_template_id = rt.id
+     WHERE sw.scheduled_date = ?
+     ORDER BY sw.created_at`,
+    [dateString]
+  );
+
+  return rows.map((row) => ({
+    id: row.id,
+    routineTemplateId: row.routine_template_id,
+    routineName: row.routine_name,
+    scheduledDate: row.scheduled_date,
+    createdAt: row.created_at,
+  }));
+}
+
+export async function getScheduledDates(): Promise<string[]> {
+  const database = getDatabase();
+
+  const rows = await database.getAllAsync<{ scheduled_date: string }>(
+    `SELECT DISTINCT scheduled_date FROM scheduled_workouts ORDER BY scheduled_date`
+  );
+
+  return rows.map((row) => row.scheduled_date);
+}
+
+export async function deleteScheduledWorkout(id: string): Promise<void> {
+  const database = getDatabase();
+  await database.runAsync('DELETE FROM scheduled_workouts WHERE id = ?', [id]);
+}
+
+export async function deleteScheduledWorkoutsForDate(dateString: string): Promise<void> {
+  const database = getDatabase();
+  await database.runAsync('DELETE FROM scheduled_workouts WHERE scheduled_date = ?', [dateString]);
 }

@@ -112,6 +112,17 @@ export default function CreateRoutineScreen() {
     }));
   };
 
+  const updateSetWeight = (exerciseId: string, setIndex: number, weight: number | null) => {
+    setExercises(exercises.map((ex) => {
+      if (ex.id === exerciseId) {
+        const newSets = [...ex.sets];
+        newSets[setIndex] = { ...newSets[setIndex], targetWeight: weight };
+        return { ...ex, sets: newSets };
+      }
+      return ex;
+    }));
+  };
+
   const handleSave = async () => {
     if (!name.trim()) {
       Alert.alert('Error', 'Please enter a routine name');
@@ -217,21 +228,34 @@ export default function CreateRoutineScreen() {
                   </View>
                 </View>
 
+                <View style={styles.setHeaderRow}>
+                  <Text style={styles.setHeaderLabel}>Set</Text>
+                  <Text style={styles.setHeaderLabel}>Weight (lbs)</Text>
+                  <Text style={styles.setHeaderLabel}>Reps</Text>
+                </View>
                 {ex.sets.map((set, setIndex) => (
                   <View key={setIndex} style={styles.setRow}>
-                    <Text style={styles.setNumber}>Set {setIndex + 1}</Text>
-                    <View style={styles.repsContainer}>
-                      <TextInput
-                        style={styles.repsInput}
-                        keyboardType="number-pad"
-                        value={String(set.targetReps)}
-                        onChangeText={(text) => {
-                          const reps = parseInt(text) || 0;
-                          updateSetReps(ex.id, setIndex, reps);
-                        }}
-                      />
-                      <Text style={styles.repsLabel}>reps</Text>
-                    </View>
+                    <Text style={styles.setNumber}>{setIndex + 1}</Text>
+                    <TextInput
+                      style={styles.weightInput}
+                      keyboardType="decimal-pad"
+                      placeholder="—"
+                      placeholderTextColor="#C7C7CC"
+                      value={set.targetWeight !== null ? String(set.targetWeight) : ''}
+                      onChangeText={(text) => {
+                        const weight = text ? parseFloat(text) || null : null;
+                        updateSetWeight(ex.id, setIndex, weight);
+                      }}
+                    />
+                    <TextInput
+                      style={styles.repsInput}
+                      keyboardType="number-pad"
+                      value={String(set.targetReps)}
+                      onChangeText={(text) => {
+                        const reps = parseInt(text) || 0;
+                        updateSetReps(ex.id, setIndex, reps);
+                      }}
+                    />
                   </View>
                 ))}
               </View>
@@ -418,10 +442,24 @@ const styles = StyleSheet.create({
     minWidth: 24,
     textAlign: 'center',
   },
+  setHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: '#E5E5EA',
+  },
+  setHeaderLabel: {
+    fontSize: 12,
+    color: '#8E8E93',
+    textTransform: 'uppercase',
+    fontWeight: '500',
+    flex: 1,
+    textAlign: 'center',
+  },
   setRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
     paddingVertical: 8,
     borderBottomWidth: 1,
     borderBottomColor: '#E5E5EA',
@@ -429,26 +467,30 @@ const styles = StyleSheet.create({
   setNumber: {
     fontSize: 15,
     color: '#8E8E93',
-    width: 50,
+    flex: 1,
+    textAlign: 'center',
+    fontWeight: '500',
   },
-  repsContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
+  weightInput: {
+    backgroundColor: '#F2F2F7',
+    borderRadius: 8,
+    paddingHorizontal: 8,
+    paddingVertical: 8,
+    fontSize: 16,
+    fontWeight: '500',
+    flex: 1,
+    textAlign: 'center',
+    marginHorizontal: 8,
   },
   repsInput: {
     backgroundColor: '#F2F2F7',
     borderRadius: 8,
-    paddingHorizontal: 12,
+    paddingHorizontal: 8,
     paddingVertical: 8,
-    fontSize: 17,
+    fontSize: 16,
     fontWeight: '500',
-    width: 60,
+    flex: 1,
     textAlign: 'center',
-  },
-  repsLabel: {
-    fontSize: 15,
-    color: '#8E8E93',
-    marginLeft: 8,
   },
   notesInput: {
     backgroundColor: '#F2F2F7',
