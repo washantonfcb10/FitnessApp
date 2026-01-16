@@ -13,9 +13,11 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import {
   getRoutineWithExercises,
   getLastWorkoutForExercise,
-  completeWorkout,
+  completeWorkoutWithPhotos,
 } from '../../src/lib/database';
 import { useWorkoutStore } from '../../src/stores/workoutStore';
+import { useTheme } from '../../src/contexts/ThemeContext';
+import WorkoutCompletionModal from '../../src/components/WorkoutCompletionModal';
 import type { RoutineTemplateWithExercises, RoutineExerciseWithDetails } from '../../src/types';
 
 interface SetInputData {
@@ -76,10 +78,15 @@ function groupExercisesBySupersets(exercises: RoutineExerciseWithDetails[]): Exe
 export default function WorkoutScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
+  const { colors, isDark } = useTheme();
   const {
     routineTemplateId,
     startedAt,
     endWorkout,
+    markCompleted,
+    resumeWorkout,
+    isInResumeWindow,
+    completedAt,
     getElapsedSeconds,
   } = useWorkoutStore();
 
@@ -88,6 +95,8 @@ export default function WorkoutScreen() {
   const [lastWorkoutData, setLastWorkoutData] = useState<Record<string, { weight: number; reps: number }[]>>({});
   const [elapsedTime, setElapsedTime] = useState(0);
   const [currentGroupIndex, setCurrentGroupIndex] = useState(0);
+  const [showCompletionModal, setShowCompletionModal] = useState(false);
+  const [resumeTimeLeft, setResumeTimeLeft] = useState(0);
 
   // Elapsed time clock - updates every second
   useEffect(() => {
@@ -96,6 +105,27 @@ export default function WorkoutScreen() {
     }, 1000);
     return () => clearInterval(interval);
   }, [getElapsedSeconds]);
+
+  // Resume window timer
+  useEffect(() => {
+    if (isInResumeWindow && completedAt) {
+      const updateResumeTime = () => {
+        const elapsed = Math.floor((Date.now() - completedAt) / 1000);
+        const remaining = Math.max(0, 600 - elapsed); // 10 minutes = 600 seconds
+        setResumeTimeLeft(remaining);
+
+        if (remaining <= 0) {
+          // Window expired
+          endWorkout();
+          router.replace('/(tabs)');
+        }
+      };
+
+      updateResumeTime();
+      const interval = setInterval(updateResumeTime, 1000);
+      return () => clearInterval(interval);
+    }
+  }, [isInResumeWindow, completedAt, endWorkout, router]);
 
   // Load routine data
   useEffect(() => {
@@ -182,27 +212,41 @@ export default function WorkoutScreen() {
   };
 
   const handleFinishWorkout = () => {
-    Alert.alert(
-      'Finish Workout',
-      'Are you sure you want to finish this workout?',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Finish',
-          onPress: async () => {
-            try {
-              if (id) {
-                await completeWorkout(id);
-              }
-              endWorkout();
-              router.replace('/(tabs)');
-            } catch (error) {
-              console.error('Failed to complete workout:', error);
-            }
-          },
-        },
-      ]
-    );
+    setShowCompletionModal(true);
+  };
+
+  const handleConfirmCompletion = async (photos: string[]) => {
+    try {
+      if (id) {
+        await completeWorkoutWithPhotos(id, null, photos);
+      }
+      markCompleted();
+      setShowCompletionModal(false);
+      // Keep modal open briefly to show resume option, then navigate
+      setTimeout(() => {
+        if (!isInResumeWindow) {
+          endWorkout();
+          router.replace('/(tabs)');
+        }
+      }, 100);
+    } catch (error) {
+      console.error('Failed to complete workout:', error);
+    }
+  };
+
+  const handleResumeWorkout = () => {
+    const resumed = resumeWorkout();
+    if (resumed) {
+      setShowCompletionModal(false);
+    }
+  };
+
+  const handleCloseModal = () => {
+    if (isInResumeWindow) {
+      endWorkout();
+    }
+    setShowCompletionModal(false);
+    router.replace('/(tabs)');
   };
 
   const handleCancelWorkout = () => {
@@ -256,9 +300,9 @@ export default function WorkoutScreen() {
 
   if (!routine || !currentGroup) {
     return (
-      <SafeAreaView style={styles.container}>
+      <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
         <View style={styles.centered}>
-          <Text style={styles.loadingText}>Loading workout...</Text>
+          <Text style={[styles.loadingText, { color: colors.textSecondary }]}>Loading workout...</Text>
         </View>
       </SafeAreaView>
     );
@@ -269,15 +313,28 @@ export default function WorkoutScreen() {
   const totalSets = Object.values(setInputs).flat().length;
 
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
+      {/* Workout Completion Modal */}
+      <WorkoutCompletionModal
+        visible={showCompletionModal || isInResumeWindow}
+        workoutName={routine.name}
+        duration={formatElapsedTime(elapsedTime)}
+        totalSets={totalCompleted}
+        onConfirm={handleConfirmCompletion}
+        onCancel={showCompletionModal && !isInResumeWindow ? () => setShowCompletionModal(false) : handleCloseModal}
+        onResume={isInResumeWindow ? handleResumeWorkout : undefined}
+        isInResumeWindow={isInResumeWindow}
+        resumeTimeLeft={resumeTimeLeft}
+      />
+
       {/* Header */}
-      <View style={styles.header}>
+      <View style={[styles.header, { backgroundColor: colors.card, borderBottomColor: colors.border }]}>
         <TouchableOpacity onPress={handleCancelWorkout}>
           <Text style={styles.cancelButton}>Cancel</Text>
         </TouchableOpacity>
         <View style={styles.headerCenter}>
-          <Text style={styles.headerTitle}>{routine.name}</Text>
-          <Text style={styles.headerSubtitle}>
+          <Text style={[styles.headerTitle, { color: colors.text }]}>{routine.name}</Text>
+          <Text style={[styles.headerSubtitle, { color: colors.textSecondary }]}>
             {currentGroupIndex + 1} of {exerciseGroups.length} • {totalCompleted}/{totalSets} sets
           </Text>
         </View>

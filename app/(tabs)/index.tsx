@@ -13,10 +13,12 @@ import { useRouter, useFocusEffect } from 'expo-router';
 import { Swipeable } from 'react-native-gesture-handler';
 import { getAllRoutines, deleteRoutine, startWorkout } from '../../src/lib/database';
 import { useWorkoutStore } from '../../src/stores/workoutStore';
+import { useTheme } from '../../src/contexts/ThemeContext';
 import type { RoutineTemplate } from '../../src/types';
 
 export default function RoutinesScreen() {
   const router = useRouter();
+  const { colors } = useTheme();
   const [routines, setRoutines] = useState<RoutineTemplate[]>([]);
   const [refreshing, setRefreshing] = useState(false);
   const { activeWorkoutId, startWorkout: startWorkoutState } = useWorkoutStore();
@@ -181,16 +183,16 @@ export default function RoutinesScreen() {
       friction={2}
     >
       <TouchableOpacity
-        style={styles.routineCard}
+        style={[styles.routineCard, { backgroundColor: colors.card }]}
         onPress={() => router.push(`/routine/${item.id}`)}
         activeOpacity={0.7}
       >
         <View style={styles.routineInfo}>
-          <Text style={styles.routineName}>{item.name}</Text>
-          <Text style={styles.routineDate}>Updated {formatDate(item.updatedAt)}</Text>
+          <Text style={[styles.routineName, { color: colors.text }]}>{item.name}</Text>
+          <Text style={[styles.routineDate, { color: colors.textSecondary }]}>Updated {formatDate(item.updatedAt)}</Text>
         </View>
         <TouchableOpacity
-          style={styles.startButton}
+          style={[styles.startButton, { backgroundColor: colors.primary }]}
           onPress={() => handleStartWorkout(item)}
         >
           <Text style={styles.startButtonText}>Start</Text>
@@ -202,15 +204,15 @@ export default function RoutinesScreen() {
   const renderEmptyState = () => (
     <View style={styles.emptyState}>
       <Text style={styles.emptyIcon}>🏋️</Text>
-      <Text style={styles.emptyTitle}>No Routines Yet</Text>
-      <Text style={styles.emptySubtitle}>
+      <Text style={[styles.emptyTitle, { color: colors.text }]}>No Routines Yet</Text>
+      <Text style={[styles.emptySubtitle, { color: colors.textSecondary }]}>
         Create your first workout routine to get started
       </Text>
     </View>
   );
 
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, { backgroundColor: colors.background }]}>
       {activeWorkoutId && (
         <TouchableOpacity
           style={styles.activeWorkoutBanner}
@@ -233,7 +235,7 @@ export default function RoutinesScreen() {
       />
 
       <TouchableOpacity
-        style={styles.fab}
+        style={[styles.fab, { backgroundColor: colors.primary }]}
         onPress={() => router.push('/routine/create')}
       >
         <Text style={styles.fabText}>+</Text>

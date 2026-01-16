@@ -119,12 +119,23 @@ export async function initDatabase(): Promise<SQLite.SQLiteDatabase> {
       FOREIGN KEY (routine_template_id) REFERENCES routine_templates(id) ON DELETE CASCADE
     );
 
+    -- Workout progress photos (pump pictures)
+    CREATE TABLE IF NOT EXISTS workout_photos (
+      id TEXT PRIMARY KEY,
+      workout_session_id TEXT NOT NULL,
+      file_path TEXT NOT NULL,
+      sort_order INTEGER NOT NULL DEFAULT 0,
+      created_at INTEGER NOT NULL,
+      FOREIGN KEY (workout_session_id) REFERENCES workout_sessions(id) ON DELETE CASCADE
+    );
+
     -- Indexes for performance
     CREATE INDEX IF NOT EXISTS idx_workout_exercises_exercise_id ON workout_exercises(exercise_id);
     CREATE INDEX IF NOT EXISTS idx_workout_sessions_started ON workout_sessions(started_at DESC);
     CREATE INDEX IF NOT EXISTS idx_workout_sets_completed ON workout_sets(completed_at DESC);
     CREATE INDEX IF NOT EXISTS idx_routine_exercises_template ON routine_exercises(routine_template_id);
     CREATE INDEX IF NOT EXISTS idx_scheduled_workouts_date ON scheduled_workouts(scheduled_date);
+    CREATE INDEX IF NOT EXISTS idx_workout_photos_session ON workout_photos(workout_session_id);
   `);
 
   // Seed default exercises if empty
@@ -723,4 +734,198 @@ export async function deleteScheduledWorkout(id: string): Promise<void> {
 export async function deleteScheduledWorkoutsForDate(dateString: string): Promise<void> {
   const database = getDatabase();
   await database.runAsync('DELETE FROM scheduled_workouts WHERE scheduled_date = ?', [dateString]);
+}
+
+// ==================== CUSTOM EXERCISE OPERATIONS ====================
+
+export async function createCustomExercise(
+  name: string,
+  category: ExerciseCategory,
+  equipment: Equipment
+): Promise<string> {
+  const database = getDatabase();
+  const id = uuidv4();
+  const now = Date.now();
+
+  await database.runAsync(
+    `INSERT INTO exercises (id, name, category, equipment, created_at, is_custom)
+     VALUES (?, ?, ?, ?, ?, 1)`,
+    [id, name, category, equipment, now]
+  );
+
+  return id;
+}
+
+export async function deleteCustomExercise(exerciseId: string): Promise<void> {
+  const database = getDatabase();
+
+  // Only delete if it's a custom exercise and not used in any routine
+  const exercise = await database.getFirstAsync<{ is_custom: number }>(
+    'SELECT is_custom FROM exercises WHERE id = ?',
+    [exerciseId]
+  );
+
+  if (!exercise || exercise.is_custom !== 1) {
+    throw new Error('Cannot delete non-custom exercise');
+  }
+
+  // Check if used in any routine
+  const usedInRoutine = await database.getFirstAsync<{ count: number }>(
+    'SELECT COUNT(*) as count FROM routine_exercises WHERE exercise_id = ?',
+    [exerciseId]
+  );
+
+  if (usedInRoutine && usedInRoutine.count > 0) {
+    throw new Error('Cannot delete exercise that is used in a routine');
+  }
+
+  await database.runAsync('DELETE FROM exercises WHERE id = ?', [exerciseId]);
+}
+
+export async function getCustomExercises(): Promise<Exercise[]> {
+  const database = getDatabase();
+  const rows = await database.getAllAsync<{
+    id: string;
+    name: string;
+    category: string;
+    equipment: string;
+    created_at: number;
+    is_custom: number;
+  }>('SELECT * FROM exercises WHERE is_custom = 1 ORDER BY created_at DESC');
+
+  return rows.map((row) => ({
+    id: row.id,
+    name: row.name,
+    category: row.category as ExerciseCategory,
+    equipment: row.equipment as Equipment,
+    createdAt: row.created_at,
+    isCustom: true,
+  }));
+}
+
+// ==================== WORKOUT PHOTO OPERATIONS ====================
+
+export interface WorkoutPhoto {
+  id: string;
+  workoutSessionId: string;
+  filePath: string;
+  sortOrder: number;
+  createdAt: number;
+}
+
+export async function addWorkoutPhoto(
+  workoutSessionId: string,
+  filePath: string,
+  sortOrder: number = 0
+): Promise<string> {
+  const database = getDatabase();
+  const id = uuidv4();
+  const now = Date.now();
+
+  await database.runAsync(
+    `INSERT INTO workout_photos (id, workout_session_id, file_path, sort_order, created_at)
+     VALUES (?, ?, ?, ?, ?)`,
+    [id, workoutSessionId, filePath, sortOrder, now]
+  );
+
+  return id;
+}
+
+export async function getWorkoutPhotos(workoutSessionId: string): Promise<WorkoutPhoto[]> {
+  const database = getDatabase();
+  const rows = await database.getAllAsync<{
+    id: string;
+    workout_session_id: string;
+    file_path: string;
+    sort_order: number;
+    created_at: number;
+  }>(
+    'SELECT * FROM workout_photos WHERE workout_session_id = ? ORDER BY sort_order',
+    [workoutSessionId]
+  );
+
+  return rows.map((row) => ({
+    id: row.id,
+    workoutSessionId: row.workout_session_id,
+    filePath: row.file_path,
+    sortOrder: row.sort_order,
+    createdAt: row.created_at,
+  }));
+}
+
+export async function deleteWorkoutPhoto(photoId: string): Promise<void> {
+  const database = getDatabase();
+  await database.runAsync('DELETE FROM workout_photos WHERE id = ?', [photoId]);
+}
+
+export async function getAllProgressPhotos(): Promise<(WorkoutPhoto & { workoutName: string; workoutDate: number })[]> {
+  const database = getDatabase();
+  const rows = await database.getAllAsync<{
+    id: string;
+    workout_session_id: string;
+    file_path: string;
+    sort_order: number;
+    created_at: number;
+    workout_name: string;
+    workout_date: number;
+  }>(
+    `SELECT wp.*, ws.name as workout_name, ws.started_at as workout_date
+     FROM workout_photos wp
+     JOIN workout_sessions ws ON wp.workout_session_id = ws.id
+     WHERE ws.status = 'completed'
+     ORDER BY ws.started_at DESC, wp.sort_order`
+  );
+
+  return rows.map((row) => ({
+    id: row.id,
+    workoutSessionId: row.workout_session_id,
+    filePath: row.file_path,
+    sortOrder: row.sort_order,
+    createdAt: row.created_at,
+    workoutName: row.workout_name,
+    workoutDate: row.workout_date,
+  }));
+}
+
+// Update completeWorkout to accept photos
+export async function completeWorkoutWithPhotos(
+  workoutId: string,
+  notes: string | null = null,
+  photoPaths: string[] = []
+): Promise<void> {
+  const database = getDatabase();
+  const now = Date.now();
+
+  await database.runAsync(
+    `UPDATE workout_sessions SET completed_at = ?, status = 'completed', notes = ? WHERE id = ?`,
+    [now, notes, workoutId]
+  );
+
+  // Add photos
+  for (let i = 0; i < photoPaths.length; i++) {
+    await addWorkoutPhoto(workoutId, photoPaths[i], i);
+  }
+}
+
+// Get photo count for workouts on a date
+export async function getWorkoutPhotosCountForDate(dateString: string): Promise<Record<string, number>> {
+  const database = getDatabase();
+  const rows = await database.getAllAsync<{
+    workout_session_id: string;
+    photo_count: number;
+  }>(
+    `SELECT wp.workout_session_id, COUNT(*) as photo_count
+     FROM workout_photos wp
+     JOIN workout_sessions ws ON wp.workout_session_id = ws.id
+     WHERE ws.status = 'completed'
+       AND date(ws.started_at / 1000, 'unixepoch', 'localtime') = ?
+     GROUP BY wp.workout_session_id`,
+    [dateString]
+  );
+
+  const result: Record<string, number> = {};
+  rows.forEach((row) => {
+    result[row.workout_session_id] = row.photo_count;
+  });
+  return result;
 }

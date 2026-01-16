@@ -4,10 +4,12 @@ import { StatusBar } from 'expo-status-bar';
 import { View, Text, ActivityIndicator, StyleSheet } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { initDatabase } from '../src/lib/database';
+import { ThemeProvider, useTheme } from '../src/contexts/ThemeContext';
 
-export default function RootLayout() {
+function RootLayoutContent() {
   const [isDbReady, setIsDbReady] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const { isDark, colors } = useTheme();
 
   useEffect(() => {
     async function setupDatabase() {
@@ -25,36 +27,37 @@ export default function RootLayout() {
 
   if (error) {
     return (
-      <View style={styles.centered}>
+      <View style={[styles.centered, { backgroundColor: colors.background }]}>
         <Text style={styles.errorText}>Database Error</Text>
-        <Text style={styles.errorMessage}>{error}</Text>
+        <Text style={[styles.errorMessage, { color: colors.textSecondary }]}>{error}</Text>
       </View>
     );
   }
 
   if (!isDbReady) {
     return (
-      <View style={styles.centered}>
-        <ActivityIndicator size="large" color="#007AFF" />
-        <Text style={styles.loadingText}>Initializing...</Text>
+      <View style={[styles.centered, { backgroundColor: colors.background }]}>
+        <ActivityIndicator size="large" color={colors.primary} />
+        <Text style={[styles.loadingText, { color: colors.textSecondary }]}>Initializing...</Text>
       </View>
     );
   }
 
   return (
-    <GestureHandlerRootView style={{ flex: 1 }}>
-      <StatusBar style="dark" />
+    <>
+      <StatusBar style={isDark ? 'light' : 'dark'} />
       <Stack
         screenOptions={{
           headerStyle: {
-            backgroundColor: '#F2F2F7',
+            backgroundColor: colors.headerBackground,
           },
-          headerTintColor: '#007AFF',
+          headerTintColor: colors.primary,
           headerTitleStyle: {
             fontWeight: '600',
+            color: colors.text,
           },
           contentStyle: {
-            backgroundColor: '#F2F2F7',
+            backgroundColor: colors.background,
           },
         }}
       >
@@ -86,7 +89,38 @@ export default function RootLayout() {
             headerShown: false,
           }}
         />
+        <Stack.Screen
+          name="profile/faq"
+          options={{
+            title: 'FAQ',
+            presentation: 'card',
+          }}
+        />
+        <Stack.Screen
+          name="profile/exercises"
+          options={{
+            title: 'Manage Exercises',
+            presentation: 'card',
+          }}
+        />
+        <Stack.Screen
+          name="profile/progress-photos"
+          options={{
+            title: 'Progress Photos',
+            presentation: 'card',
+          }}
+        />
       </Stack>
+    </>
+  );
+}
+
+export default function RootLayout() {
+  return (
+    <GestureHandlerRootView style={{ flex: 1 }}>
+      <ThemeProvider>
+        <RootLayoutContent />
+      </ThemeProvider>
     </GestureHandlerRootView>
   );
 }
@@ -96,12 +130,10 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#F2F2F7',
   },
   loadingText: {
     marginTop: 12,
     fontSize: 16,
-    color: '#8E8E93',
   },
   errorText: {
     fontSize: 20,
@@ -111,7 +143,6 @@ const styles = StyleSheet.create({
   },
   errorMessage: {
     fontSize: 14,
-    color: '#8E8E93',
     textAlign: 'center',
     paddingHorizontal: 32,
   },

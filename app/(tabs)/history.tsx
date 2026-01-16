@@ -9,6 +9,8 @@ import {
   Modal,
   FlatList,
   Alert,
+  Image,
+  Dimensions,
 } from 'react-native';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { Calendar, DateData } from 'react-native-calendars';
@@ -21,11 +23,16 @@ import {
   deleteScheduledWorkout,
   getAllRoutines,
   startWorkout,
+  getWorkoutPhotos,
   WorkoutSummary,
   ScheduledWorkout,
+  WorkoutPhoto,
 } from '../../src/lib/database';
 import { useWorkoutStore } from '../../src/stores/workoutStore';
+import { useTheme } from '../../src/contexts/ThemeContext';
 import type { RoutineTemplate } from '../../src/types';
+
+const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
 type MarkedDates = {
   [date: string]: {
@@ -39,12 +46,15 @@ type MarkedDates = {
 
 export default function HistoryScreen() {
   const router = useRouter();
+  const { colors, isDark } = useTheme();
   const { activeWorkoutId, startWorkout: startWorkoutState } = useWorkoutStore();
   const [workoutDates, setWorkoutDates] = useState<string[]>([]);
   const [scheduledDates, setScheduledDates] = useState<string[]>([]);
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
   const [selectedWorkouts, setSelectedWorkouts] = useState<WorkoutSummary[]>([]);
   const [selectedScheduled, setSelectedScheduled] = useState<ScheduledWorkout[]>([]);
+  const [workoutPhotos, setWorkoutPhotos] = useState<Record<string, WorkoutPhoto[]>>({});
+  const [selectedPhotoIndex, setSelectedPhotoIndex] = useState<{ workoutId: string; index: number } | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadingWorkouts, setLoadingWorkouts] = useState(false);
   const [showRoutinePicker, setShowRoutinePicker] = useState(false);
@@ -80,10 +90,21 @@ export default function HistoryScreen() {
       ]);
       setSelectedWorkouts(summaries);
       setSelectedScheduled(scheduled);
+
+      // Load photos for each workout
+      const photosMap: Record<string, WorkoutPhoto[]> = {};
+      for (const workout of summaries) {
+        const photos = await getWorkoutPhotos(workout.id);
+        if (photos.length > 0) {
+          photosMap[workout.id] = photos;
+        }
+      }
+      setWorkoutPhotos(photosMap);
     } catch (error) {
       console.error('Failed to load workouts for date:', error);
       setSelectedWorkouts([]);
       setSelectedScheduled([]);
+      setWorkoutPhotos({});
     } finally {
       setLoadingWorkouts(false);
     }
@@ -256,32 +277,32 @@ export default function HistoryScreen() {
 
   if (loading) {
     return (
-      <View style={styles.centered}>
-        <ActivityIndicator size="large" color="#007AFF" />
+      <View style={[styles.centered, { backgroundColor: colors.background }]}>
+        <ActivityIndicator size="large" color={colors.primary} />
       </View>
     );
   }
 
   return (
-    <ScrollView style={styles.container} contentContainerStyle={styles.contentContainer}>
+    <ScrollView style={[styles.container, { backgroundColor: colors.background }]} contentContainerStyle={styles.contentContainer}>
       {/* Calendar */}
-      <View style={styles.calendarContainer}>
+      <View style={[styles.calendarContainer, { backgroundColor: colors.card }]}>
         <Calendar
           markedDates={markedDates}
           onDayPress={handleDayPress}
           theme={{
-            backgroundColor: '#FFFFFF',
-            calendarBackground: '#FFFFFF',
-            textSectionTitleColor: '#8E8E93',
-            selectedDayBackgroundColor: '#007AFF',
+            backgroundColor: colors.card,
+            calendarBackground: colors.card,
+            textSectionTitleColor: colors.textSecondary,
+            selectedDayBackgroundColor: colors.primary,
             selectedDayTextColor: '#FFFFFF',
-            todayTextColor: '#007AFF',
-            dayTextColor: '#000000',
-            textDisabledColor: '#C7C7CC',
+            todayTextColor: colors.primary,
+            dayTextColor: colors.text,
+            textDisabledColor: isDark ? '#48484A' : '#C7C7CC',
             dotColor: '#34C759',
             selectedDotColor: '#FFFFFF',
-            arrowColor: '#007AFF',
-            monthTextColor: '#000000',
+            arrowColor: colors.primary,
+            monthTextColor: colors.text,
             textDayFontWeight: '400',
             textMonthFontWeight: '600',
             textDayHeaderFontWeight: '500',
@@ -298,14 +319,14 @@ export default function HistoryScreen() {
         <View style={styles.legendRow}>
           <View style={styles.legendItem}>
             <View style={[styles.legendDot, { backgroundColor: '#34C759' }]} />
-            <Text style={styles.legendText}>Completed</Text>
+            <Text style={[styles.legendText, { color: colors.textSecondary }]}>Completed</Text>
           </View>
           <View style={styles.legendItem}>
-            <View style={[styles.legendDot, { backgroundColor: '#007AFF' }]} />
-            <Text style={styles.legendText}>Scheduled</Text>
+            <View style={[styles.legendDot, { backgroundColor: colors.primary }]} />
+            <Text style={[styles.legendText, { color: colors.textSecondary }]}>Scheduled</Text>
           </View>
         </View>
-        <Text style={styles.workoutCount}>
+        <Text style={[styles.workoutCount, { color: colors.textSecondary }]}>
           {workoutDates.length} workout{workoutDates.length !== 1 ? 's' : ''}
         </Text>
       </View>
@@ -313,27 +334,27 @@ export default function HistoryScreen() {
       {/* Selected Date Workouts */}
       {selectedDate && (
         <View style={styles.selectedDateSection}>
-          <Text style={styles.selectedDateHeader}>
+          <Text style={[styles.selectedDateHeader, { color: colors.text }]}>
             {formatDateHeader(selectedDate)}
           </Text>
 
           {loadingWorkouts ? (
             <View style={styles.loadingContainer}>
-              <ActivityIndicator size="small" color="#007AFF" />
+              <ActivityIndicator size="small" color={colors.primary} />
             </View>
           ) : (
             <>
               {/* Scheduled Workouts */}
               {selectedScheduled.length > 0 && (
                 <View style={styles.scheduledSection}>
-                  <Text style={styles.sectionLabel}>SCHEDULED</Text>
+                  <Text style={[styles.sectionLabel, { color: colors.textSecondary }]}>SCHEDULED</Text>
                   {selectedScheduled.map((scheduled) => (
-                    <View key={scheduled.id} style={styles.scheduledCard}>
+                    <View key={scheduled.id} style={[styles.scheduledCard, { backgroundColor: colors.card, borderLeftColor: colors.primary }]}>
                       <View style={styles.scheduledInfo}>
-                        <View style={styles.scheduledBadge}>
-                          <Text style={styles.scheduledBadgeText}>PLANNED</Text>
+                        <View style={[styles.scheduledBadge, { backgroundColor: isDark ? 'rgba(10, 132, 255, 0.2)' : '#007AFF15' }]}>
+                          <Text style={[styles.scheduledBadgeText, { color: colors.primary }]}>PLANNED</Text>
                         </View>
-                        <Text style={styles.scheduledName}>{scheduled.routineName}</Text>
+                        <Text style={[styles.scheduledName, { color: colors.text }]}>{scheduled.routineName}</Text>
                       </View>
                       <View style={styles.scheduledActions}>
                         <TouchableOpacity
@@ -357,56 +378,85 @@ export default function HistoryScreen() {
               {/* Completed Workouts */}
               {selectedWorkouts.length > 0 && (
                 <View style={styles.completedSection}>
-                  <Text style={styles.sectionLabel}>COMPLETED</Text>
-                  {selectedWorkouts.map((workout) => (
-                    <View key={workout.id} style={styles.workoutCard}>
-                      <View style={styles.workoutHeader}>
-                        <Text style={styles.workoutName}>{workout.name}</Text>
-                        <Text style={styles.workoutTime}>
-                          {formatTime(workout.startedAt)}
-                        </Text>
-                      </View>
+                  <Text style={[styles.sectionLabel, { color: colors.textSecondary }]}>COMPLETED</Text>
+                  {selectedWorkouts.map((workout) => {
+                    const photos = workoutPhotos[workout.id] || [];
+                    return (
+                      <View key={workout.id} style={[styles.workoutCard, { backgroundColor: colors.card }]}>
+                        <View style={styles.workoutHeader}>
+                          <Text style={[styles.workoutName, { color: colors.text }]}>{workout.name}</Text>
+                          <Text style={[styles.workoutTime, { color: colors.textSecondary }]}>
+                            {formatTime(workout.startedAt)}
+                          </Text>
+                        </View>
 
-                      <View style={styles.statsGrid}>
-                        <View style={styles.statItem}>
-                          <Text style={styles.statValue}>
-                            {formatDuration(workout.duration)}
-                          </Text>
-                          <Text style={styles.statLabel}>Duration</Text>
+                        <View style={styles.statsGrid}>
+                          <View style={styles.statItem}>
+                            <Text style={[styles.statValue, { color: colors.text }]}>
+                              {formatDuration(workout.duration)}
+                            </Text>
+                            <Text style={[styles.statLabel, { color: colors.textSecondary }]}>Duration</Text>
+                          </View>
+                          <View style={styles.statItem}>
+                            <Text style={[styles.statValue, { color: colors.text }]}>
+                              {formatVolume(workout.totalVolume)}
+                            </Text>
+                            <Text style={[styles.statLabel, { color: colors.textSecondary }]}>Volume</Text>
+                          </View>
+                          <View style={styles.statItem}>
+                            <Text style={[styles.statValue, { color: colors.text }]}>{workout.totalSets}</Text>
+                            <Text style={[styles.statLabel, { color: colors.textSecondary }]}>Sets</Text>
+                          </View>
+                          <View style={styles.statItem}>
+                            <Text style={[styles.statValue, { color: colors.text }]}>{workout.exerciseCount}</Text>
+                            <Text style={[styles.statLabel, { color: colors.textSecondary }]}>Exercises</Text>
+                          </View>
                         </View>
-                        <View style={styles.statItem}>
-                          <Text style={styles.statValue}>
-                            {formatVolume(workout.totalVolume)}
-                          </Text>
-                          <Text style={styles.statLabel}>Volume</Text>
-                        </View>
-                        <View style={styles.statItem}>
-                          <Text style={styles.statValue}>{workout.totalSets}</Text>
-                          <Text style={styles.statLabel}>Sets</Text>
-                        </View>
-                        <View style={styles.statItem}>
-                          <Text style={styles.statValue}>{workout.exerciseCount}</Text>
-                          <Text style={styles.statLabel}>Exercises</Text>
-                        </View>
+
+                        {/* Progress Photos */}
+                        {photos.length > 0 && (
+                          <View style={styles.photosSection}>
+                            <Text style={[styles.photosLabel, { color: colors.textSecondary }]}>
+                              Progress Photos
+                            </Text>
+                            <ScrollView
+                              horizontal
+                              showsHorizontalScrollIndicator={false}
+                              contentContainerStyle={styles.photosRow}
+                            >
+                              {photos.map((photo, index) => (
+                                <TouchableOpacity
+                                  key={photo.id}
+                                  onPress={() => setSelectedPhotoIndex({ workoutId: workout.id, index })}
+                                >
+                                  <Image
+                                    source={{ uri: photo.filePath }}
+                                    style={styles.photoThumbnail}
+                                  />
+                                </TouchableOpacity>
+                              ))}
+                            </ScrollView>
+                          </View>
+                        )}
                       </View>
-                    </View>
-                  ))}
+                    );
+                  })}
                 </View>
               )}
 
               {/* No workouts message */}
               {selectedWorkouts.length === 0 && selectedScheduled.length === 0 && (
-                <View style={styles.noWorkoutsContainer}>
-                  <Text style={styles.noWorkoutsText}>No workouts on this day</Text>
+                <View style={[styles.noWorkoutsContainer, { backgroundColor: colors.card }]}>
+                  <Text style={[styles.noWorkoutsText, { color: colors.textSecondary }]}>No workouts on this day</Text>
                 </View>
               )}
 
               {/* Schedule button */}
               <TouchableOpacity
-                style={styles.scheduleButton}
+                style={[styles.scheduleButton, { borderColor: colors.primary }]}
                 onPress={openRoutinePicker}
               >
-                <Text style={styles.scheduleButtonText}>+ Schedule Routine</Text>
+                <Text style={[styles.scheduleButtonText, { color: colors.primary }]}>+ Schedule Routine</Text>
               </TouchableOpacity>
             </>
           )}
@@ -416,7 +466,7 @@ export default function HistoryScreen() {
       {/* Empty state when no date selected */}
       {!selectedDate && workoutDates.length > 0 && (
         <View style={styles.hintContainer}>
-          <Text style={styles.hintText}>
+          <Text style={[styles.hintText, { color: colors.textSecondary }]}>
             Tap a date with a green dot to see workout details
           </Text>
         </View>
@@ -426,8 +476,8 @@ export default function HistoryScreen() {
       {!selectedDate && workoutDates.length === 0 && (
         <View style={styles.emptyState}>
           <Text style={styles.emptyIcon}>📅</Text>
-          <Text style={styles.emptyTitle}>No Workout History</Text>
-          <Text style={styles.emptySubtitle}>
+          <Text style={[styles.emptyTitle, { color: colors.text }]}>No Workout History</Text>
+          <Text style={[styles.emptySubtitle, { color: colors.textSecondary }]}>
             Complete a workout to see it on your calendar
           </Text>
         </View>
@@ -440,17 +490,17 @@ export default function HistoryScreen() {
         presentationStyle="pageSheet"
         onRequestClose={() => setShowRoutinePicker(false)}
       >
-        <View style={styles.modalContainer}>
-          <View style={styles.modalHeader}>
+        <View style={[styles.modalContainer, { backgroundColor: colors.background }]}>
+          <View style={[styles.modalHeader, { backgroundColor: colors.card, borderBottomColor: colors.border }]}>
             <TouchableOpacity onPress={() => setShowRoutinePicker(false)}>
-              <Text style={styles.modalCancel}>Cancel</Text>
+              <Text style={[styles.modalCancel, { color: colors.primary }]}>Cancel</Text>
             </TouchableOpacity>
-            <Text style={styles.modalTitle}>Schedule Routine</Text>
+            <Text style={[styles.modalTitle, { color: colors.text }]}>Schedule Routine</Text>
             <View style={{ width: 60 }} />
           </View>
 
           {selectedDate && (
-            <View style={styles.modalDateBanner}>
+            <View style={[styles.modalDateBanner, { backgroundColor: colors.primary }]}>
               <Text style={styles.modalDateText}>
                 {formatDateHeader(selectedDate)}
               </Text>
@@ -462,21 +512,88 @@ export default function HistoryScreen() {
             keyExtractor={(item) => item.id}
             renderItem={({ item }) => (
               <TouchableOpacity
-                style={styles.routinePickerItem}
+                style={[styles.routinePickerItem, { backgroundColor: colors.card }]}
                 onPress={() => handleScheduleRoutine(item)}
               >
-                <Text style={styles.routinePickerName}>{item.name}</Text>
+                <Text style={[styles.routinePickerName, { color: colors.text }]}>{item.name}</Text>
               </TouchableOpacity>
             )}
             contentContainerStyle={styles.routinePickerList}
             ListEmptyComponent={
               <View style={styles.emptyRoutines}>
-                <Text style={styles.emptyRoutinesText}>
+                <Text style={[styles.emptyRoutinesText, { color: colors.textSecondary }]}>
                   No routines yet. Create one first!
                 </Text>
               </View>
             }
           />
+        </View>
+      </Modal>
+
+      {/* Photo Viewer Modal */}
+      <Modal
+        visible={selectedPhotoIndex !== null}
+        animationType="fade"
+        transparent
+        onRequestClose={() => setSelectedPhotoIndex(null)}
+      >
+        <View style={styles.photoViewerOverlay}>
+          <TouchableOpacity
+            style={styles.photoViewerClose}
+            onPress={() => setSelectedPhotoIndex(null)}
+          >
+            <Text style={styles.photoViewerCloseText}>✕</Text>
+          </TouchableOpacity>
+          {selectedPhotoIndex && workoutPhotos[selectedPhotoIndex.workoutId] && (
+            <Image
+              source={{ uri: workoutPhotos[selectedPhotoIndex.workoutId][selectedPhotoIndex.index].filePath }}
+              style={styles.photoViewerImage}
+              resizeMode="contain"
+            />
+          )}
+          {selectedPhotoIndex && workoutPhotos[selectedPhotoIndex.workoutId] && (
+            <View style={styles.photoViewerNav}>
+              <TouchableOpacity
+                style={[
+                  styles.photoNavButton,
+                  selectedPhotoIndex.index === 0 && styles.photoNavButtonDisabled,
+                ]}
+                onPress={() => {
+                  if (selectedPhotoIndex.index > 0) {
+                    setSelectedPhotoIndex({
+                      ...selectedPhotoIndex,
+                      index: selectedPhotoIndex.index - 1,
+                    });
+                  }
+                }}
+                disabled={selectedPhotoIndex.index === 0}
+              >
+                <Text style={styles.photoNavText}>‹</Text>
+              </TouchableOpacity>
+              <Text style={styles.photoViewerCount}>
+                {selectedPhotoIndex.index + 1} / {workoutPhotos[selectedPhotoIndex.workoutId].length}
+              </Text>
+              <TouchableOpacity
+                style={[
+                  styles.photoNavButton,
+                  selectedPhotoIndex.index === workoutPhotos[selectedPhotoIndex.workoutId].length - 1 &&
+                    styles.photoNavButtonDisabled,
+                ]}
+                onPress={() => {
+                  const photos = workoutPhotos[selectedPhotoIndex.workoutId];
+                  if (selectedPhotoIndex.index < photos.length - 1) {
+                    setSelectedPhotoIndex({
+                      ...selectedPhotoIndex,
+                      index: selectedPhotoIndex.index + 1,
+                    });
+                  }
+                }}
+                disabled={selectedPhotoIndex.index === workoutPhotos[selectedPhotoIndex.workoutId].length - 1}
+              >
+                <Text style={styles.photoNavText}>›</Text>
+              </TouchableOpacity>
+            </View>
+          )}
         </View>
       </Modal>
     </ScrollView>
@@ -777,5 +894,82 @@ const styles = StyleSheet.create({
     fontSize: 15,
     color: '#8E8E93',
     textAlign: 'center',
+  },
+  // Photos styles
+  photosSection: {
+    marginTop: 16,
+    paddingTop: 16,
+    borderTopWidth: 1,
+    borderTopColor: '#E5E5EA',
+  },
+  photosLabel: {
+    fontSize: 12,
+    fontWeight: '600',
+    letterSpacing: 0.5,
+    marginBottom: 10,
+  },
+  photosRow: {
+    gap: 8,
+  },
+  photoThumbnail: {
+    width: 60,
+    height: 80,
+    borderRadius: 8,
+  },
+  // Photo viewer modal
+  photoViewerOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.95)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  photoViewerClose: {
+    position: 'absolute',
+    top: 60,
+    right: 20,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 10,
+  },
+  photoViewerCloseText: {
+    color: '#FFFFFF',
+    fontSize: 20,
+    fontWeight: '600',
+  },
+  photoViewerImage: {
+    width: SCREEN_WIDTH - 40,
+    height: '70%',
+  },
+  photoViewerNav: {
+    position: 'absolute',
+    bottom: 80,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 24,
+  },
+  photoNavButton: {
+    width: 50,
+    height: 50,
+    borderRadius: 25,
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  photoNavButtonDisabled: {
+    opacity: 0.3,
+  },
+  photoNavText: {
+    color: '#FFFFFF',
+    fontSize: 28,
+    fontWeight: '300',
+  },
+  photoViewerCount: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: '500',
   },
 });

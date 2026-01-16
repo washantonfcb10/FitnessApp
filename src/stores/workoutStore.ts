@@ -5,12 +5,18 @@ import type { WorkoutSet } from '../types';
 
 // ==================== ACTIVE WORKOUT STATE ====================
 
+const RESUME_WINDOW_MS = 10 * 60 * 1000; // 10 minutes in milliseconds
+
 interface ActiveWorkoutState {
   // Current workout session
   activeWorkoutId: string | null;
   workoutName: string | null;
   routineTemplateId: string | null;
   startedAt: number | null;
+
+  // Completion state (for 10-minute resume window)
+  completedAt: number | null;
+  isInResumeWindow: boolean;
 
   // Current position in workout
   currentExerciseIndex: number;
@@ -25,8 +31,11 @@ interface ActiveWorkoutState {
   setCurrentSet: (setNumber: number) => void;
   addLoggedSet: (workoutExerciseId: string, set: WorkoutSet) => void;
   endWorkout: () => void;
+  markCompleted: () => void;
+  resumeWorkout: () => boolean;
   abandonWorkout: () => void;
   getElapsedSeconds: () => number;
+  checkResumeWindow: () => boolean;
 }
 
 export const useWorkoutStore = create<ActiveWorkoutState>()(
@@ -36,6 +45,8 @@ export const useWorkoutStore = create<ActiveWorkoutState>()(
       workoutName: null,
       routineTemplateId: null,
       startedAt: null,
+      completedAt: null,
+      isInResumeWindow: false,
       currentExerciseIndex: 0,
       currentSetNumber: 1,
       loggedSets: new Map(),
@@ -46,6 +57,8 @@ export const useWorkoutStore = create<ActiveWorkoutState>()(
           workoutName: name,
           routineTemplateId,
           startedAt: Date.now(),
+          completedAt: null,
+          isInResumeWindow: false,
           currentExerciseIndex: 0,
           currentSetNumber: 1,
           loggedSets: new Map(),
@@ -68,12 +81,61 @@ export const useWorkoutStore = create<ActiveWorkoutState>()(
         set({ loggedSets: newMap });
       },
 
+      markCompleted: () => {
+        // Mark workout as completed but keep state for 10-minute resume window
+        set({
+          completedAt: Date.now(),
+          isInResumeWindow: true,
+        });
+      },
+
+      resumeWorkout: () => {
+        const { completedAt, isInResumeWindow } = get();
+        if (!completedAt || !isInResumeWindow) return false;
+
+        const elapsed = Date.now() - completedAt;
+        if (elapsed <= RESUME_WINDOW_MS) {
+          // Can resume - clear completion state
+          set({
+            completedAt: null,
+            isInResumeWindow: false,
+          });
+          return true;
+        }
+        return false;
+      },
+
+      checkResumeWindow: () => {
+        const { completedAt, isInResumeWindow } = get();
+        if (!completedAt || !isInResumeWindow) return false;
+
+        const elapsed = Date.now() - completedAt;
+        if (elapsed > RESUME_WINDOW_MS) {
+          // Window expired - clear state
+          set({
+            activeWorkoutId: null,
+            workoutName: null,
+            routineTemplateId: null,
+            startedAt: null,
+            completedAt: null,
+            isInResumeWindow: false,
+            currentExerciseIndex: 0,
+            currentSetNumber: 1,
+            loggedSets: new Map(),
+          });
+          return false;
+        }
+        return true;
+      },
+
       endWorkout: () => {
         set({
           activeWorkoutId: null,
           workoutName: null,
           routineTemplateId: null,
           startedAt: null,
+          completedAt: null,
+          isInResumeWindow: false,
           currentExerciseIndex: 0,
           currentSetNumber: 1,
           loggedSets: new Map(),
@@ -86,6 +148,8 @@ export const useWorkoutStore = create<ActiveWorkoutState>()(
           workoutName: null,
           routineTemplateId: null,
           startedAt: null,
+          completedAt: null,
+          isInResumeWindow: false,
           currentExerciseIndex: 0,
           currentSetNumber: 1,
           loggedSets: new Map(),
@@ -106,6 +170,8 @@ export const useWorkoutStore = create<ActiveWorkoutState>()(
         workoutName: state.workoutName,
         routineTemplateId: state.routineTemplateId,
         startedAt: state.startedAt,
+        completedAt: state.completedAt,
+        isInResumeWindow: state.isInResumeWindow,
         currentExerciseIndex: state.currentExerciseIndex,
         currentSetNumber: state.currentSetNumber,
       }),

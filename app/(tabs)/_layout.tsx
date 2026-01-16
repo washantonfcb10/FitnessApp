@@ -1,12 +1,12 @@
 import { Tabs } from 'expo-router';
 import { View, Text, StyleSheet } from 'react-native';
+import { useTheme } from '../../src/contexts/ThemeContext';
 
-// Simple icon components (replace with @expo/vector-icons in production)
 function TabIcon({ name, focused }: { name: string; focused: boolean }) {
   const icons: Record<string, string> = {
     routines: '📋',
     history: '📊',
-    exercises: '💪',
+    profile: '⚙️',
   };
 
   return (
@@ -19,20 +19,23 @@ function TabIcon({ name, focused }: { name: string; focused: boolean }) {
 }
 
 export default function TabLayout() {
+  const { colors } = useTheme();
+
   return (
     <Tabs
       screenOptions={{
-        tabBarActiveTintColor: '#007AFF',
-        tabBarInactiveTintColor: '#8E8E93',
+        tabBarActiveTintColor: colors.primary,
+        tabBarInactiveTintColor: colors.textSecondary,
         tabBarStyle: {
-          backgroundColor: '#FFFFFF',
-          borderTopColor: '#E5E5EA',
+          backgroundColor: colors.tabBar,
+          borderTopColor: colors.border,
         },
         headerStyle: {
-          backgroundColor: '#F2F2F7',
+          backgroundColor: colors.headerBackground,
         },
         headerTitleStyle: {
           fontWeight: '600',
+          color: colors.text,
         },
       }}
     >
@@ -51,10 +54,16 @@ export default function TabLayout() {
         }}
       />
       <Tabs.Screen
+        name="profile"
+        options={{
+          title: 'Profile',
+          tabBarIcon: ({ focused }) => <TabIcon name="profile" focused={focused} />,
+        }}
+      />
+      <Tabs.Screen
         name="exercises"
         options={{
-          title: 'Exercises',
-          tabBarIcon: ({ focused }) => <TabIcon name="exercises" focused={focused} />,
+          href: null, // Hide from tab bar
         }}
       />
     </Tabs>
