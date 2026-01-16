@@ -1,0 +1,50 @@
+name: Build iOS IPA
+
+on:
+  workflow_dispatch:  # Manual trigger
+
+jobs:
+  build:
+    runs-on: macos-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Generate native project
+        run: npx expo prebuild --platform ios --clean
+
+      - name: Build IPA
+        run: |
+          cd ios
+          xcodebuild -workspace FitnessApp.xcworkspace \
+            -scheme FitnessApp \
+            -configuration Release \
+            -sdk iphoneos \
+            -archivePath $PWD/build/FitnessApp.xcarchive \
+            archive \
+            CODE_SIGN_IDENTITY="" \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGNING_ALLOWED=NO
+
+      - name: Create IPA
+        run: |
+          cd ios/build
+          mkdir -p Payload
+          cp -r FitnessApp.xcarchive/Products/Applications/FitnessApp.app Payload/
+          zip -r FitnessApp.ipa Payload
+
+      - name: Upload IPA
+        uses: actions/upload-artifact@v4
+        with:
+          name: FitnessApp-iOS
+          path: ios/build/FitnessApp.ipa
