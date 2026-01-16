@@ -11,11 +11,13 @@ import {
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { getRoutineWithExercises, startWorkout } from '../../src/lib/database';
 import { useWorkoutStore } from '../../src/stores/workoutStore';
+import { useTheme } from '../../src/contexts/ThemeContext';
 import type { RoutineTemplateWithExercises } from '../../src/types';
 
 export default function RoutineDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
+  const { colors, isDark } = useTheme();
   const [routine, setRoutine] = useState<RoutineTemplateWithExercises | null>(null);
   const [loading, setLoading] = useState(true);
   const { startWorkout: startWorkoutState } = useWorkoutStore();
@@ -50,40 +52,40 @@ export default function RoutineDetailScreen() {
 
   if (loading) {
     return (
-      <View style={styles.centered}>
-        <ActivityIndicator size="large" color="#007AFF" />
+      <View style={[styles.centered, { backgroundColor: colors.background }]}>
+        <ActivityIndicator size="large" color={colors.primary} />
       </View>
     );
   }
 
   if (!routine) {
     return (
-      <View style={styles.centered}>
-        <Text style={styles.errorText}>Routine not found</Text>
+      <View style={[styles.centered, { backgroundColor: colors.background }]}>
+        <Text style={[styles.errorText, { color: colors.textSecondary }]}>Routine not found</Text>
       </View>
     );
   }
 
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, { backgroundColor: colors.background }]}>
       <ScrollView style={styles.scrollView}>
         <View style={styles.header}>
-          <Text style={styles.title}>{routine.name}</Text>
-          <Text style={styles.subtitle}>
+          <Text style={[styles.title, { color: colors.text }]}>{routine.name}</Text>
+          <Text style={[styles.subtitle, { color: colors.textSecondary }]}>
             {routine.exercises.length} exercise{routine.exercises.length !== 1 ? 's' : ''}
           </Text>
         </View>
 
         <View style={styles.exercisesList}>
           {routine.exercises.map((ex, index) => (
-            <View key={ex.id} style={styles.exerciseCard}>
+            <View key={ex.id} style={[styles.exerciseCard, { backgroundColor: colors.card }]}>
               <View style={styles.exerciseHeader}>
-                <View style={styles.exerciseNumber}>
+                <View style={[styles.exerciseNumber, { backgroundColor: colors.primary }]}>
                   <Text style={styles.exerciseNumberText}>{index + 1}</Text>
                 </View>
                 <View style={styles.exerciseInfo}>
-                  <Text style={styles.exerciseName}>{ex.exercise.name}</Text>
-                  <Text style={styles.exerciseMeta}>
+                  <Text style={[styles.exerciseName, { color: colors.text }]}>{ex.exercise.name}</Text>
+                  <Text style={[styles.exerciseMeta, { color: colors.textSecondary }]}>
                     {ex.sets.length} sets • {ex.restSeconds}s rest
                   </Text>
                 </View>
@@ -91,8 +93,8 @@ export default function RoutineDetailScreen() {
 
               <View style={styles.setsPreview}>
                 {ex.sets.map((set, setIndex) => (
-                  <View key={setIndex} style={styles.setChip}>
-                    <Text style={styles.setChipText}>
+                  <View key={setIndex} style={[styles.setChip, { backgroundColor: isDark ? '#2C2C2E' : '#F2F2F7' }]}>
+                    <Text style={[styles.setChipText, { color: colors.text }]}>
                       {set.targetWeight ? `${set.targetWeight}×` : ''}
                       {set.targetReps}
                     </Text>
@@ -101,14 +103,14 @@ export default function RoutineDetailScreen() {
               </View>
 
               {ex.notes && (
-                <Text style={styles.exerciseNotes}>{ex.notes}</Text>
+                <Text style={[styles.exerciseNotes, { color: isDark ? '#A0A0A5' : '#636366' }]}>{ex.notes}</Text>
               )}
             </View>
           ))}
         </View>
       </ScrollView>
 
-      <View style={styles.footer}>
+      <View style={[styles.footer, { backgroundColor: colors.card, borderTopColor: colors.border }]}>
         <TouchableOpacity style={styles.startButton} onPress={handleStartWorkout}>
           <Text style={styles.startButtonText}>Start Workout</Text>
         </TouchableOpacity>

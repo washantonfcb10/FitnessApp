@@ -79,6 +79,7 @@ function RootLayoutContent() {
           options={{
             title: 'Create Routine',
             presentation: 'modal',
+            gestureEnabled: false,
           }}
         />
         <Stack.Screen
@@ -87,6 +88,7 @@ function RootLayoutContent() {
             title: 'Workout',
             presentation: 'fullScreenModal',
             headerShown: false,
+            gestureEnabled: false,
           }}
         />
         <Stack.Screen

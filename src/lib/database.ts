@@ -736,6 +736,40 @@ export async function deleteScheduledWorkoutsForDate(dateString: string): Promis
   await database.runAsync('DELETE FROM scheduled_workouts WHERE scheduled_date = ?', [dateString]);
 }
 
+export async function deleteWorkout(workoutId: string): Promise<void> {
+  const database = getDatabase();
+
+  // Delete related workout sets first
+  await database.runAsync('DELETE FROM workout_sets WHERE workout_id = ?', [workoutId]);
+
+  // Delete related workout photos
+  await database.runAsync('DELETE FROM workout_photos WHERE workout_id = ?', [workoutId]);
+
+  // Delete the workout session
+  await database.runAsync('DELETE FROM workout_sessions WHERE id = ?', [workoutId]);
+}
+
+export async function createCompletedWorkoutForDate(
+  routineTemplateId: string,
+  dateString: string
+): Promise<string> {
+  const database = getDatabase();
+  const id = uuidv4();
+
+  // Create a timestamp for the start of that date (noon to avoid timezone issues)
+  const dateObj = new Date(dateString + 'T12:00:00');
+  const startedAt = dateObj.getTime();
+  const completedAt = startedAt + (30 * 60 * 1000); // 30 minutes later
+
+  await database.runAsync(
+    `INSERT INTO workout_sessions (id, routine_template_id, started_at, completed_at, status)
+     VALUES (?, ?, ?, ?, 'completed')`,
+    [id, routineTemplateId, startedAt, completedAt]
+  );
+
+  return id;
+}
+
 // ==================== CUSTOM EXERCISE OPERATIONS ====================
 
 export async function createCustomExercise(

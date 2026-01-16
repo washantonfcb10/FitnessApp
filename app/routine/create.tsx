@@ -14,6 +14,7 @@ import {
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { getAllExercises, createRoutine } from '../../src/lib/database';
+import { useTheme } from '../../src/contexts/ThemeContext';
 import type { Exercise, CreateRoutineInput, CreateRoutineExerciseInput } from '../../src/types';
 
 interface RoutineExerciseFormData {
@@ -26,6 +27,7 @@ interface RoutineExerciseFormData {
 
 export default function CreateRoutineScreen() {
   const router = useRouter();
+  const { colors, isDark } = useTheme();
   const [name, setName] = useState('');
   const [exercises, setExercises] = useState<RoutineExerciseFormData[]>([]);
   const [showExercisePicker, setShowExercisePicker] = useState(false);
@@ -55,9 +57,9 @@ export default function CreateRoutineScreen() {
       restSeconds: 90,
       notes: '',
       sets: [
-        { targetReps: 10, targetWeight: null },
-        { targetReps: 10, targetWeight: null },
-        { targetReps: 10, targetWeight: null },
+        { targetReps: 8, targetWeight: null },
+        { targetReps: 8, targetWeight: null },
+        { targetReps: 8, targetWeight: null },
       ],
     };
     setExercises([...exercises, newExercise]);
@@ -79,7 +81,7 @@ export default function CreateRoutineScreen() {
   const addSet = (exerciseId: string) => {
     setExercises(exercises.map((ex) => {
       if (ex.id === exerciseId) {
-        const lastSet = ex.sets[ex.sets.length - 1] || { targetReps: 10, targetWeight: null };
+        const lastSet = ex.sets[ex.sets.length - 1] || { targetReps: 8, targetWeight: null };
         return {
           ...ex,
           sets: [...ex.sets, { ...lastSet }],
@@ -172,17 +174,17 @@ export default function CreateRoutineScreen() {
 
   return (
     <KeyboardAvoidingView
-      style={styles.container}
+      style={[styles.container, { backgroundColor: colors.background }]}
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
     >
       <ScrollView style={styles.scrollView} keyboardShouldPersistTaps="handled">
         {/* Routine Name Input */}
         <View style={styles.section}>
-          <Text style={styles.label}>Routine Name</Text>
+          <Text style={[styles.label, { color: colors.textSecondary }]}>Routine Name</Text>
           <TextInput
-            style={styles.nameInput}
+            style={[styles.nameInput, { backgroundColor: colors.card, color: colors.text }]}
             placeholder="e.g., Push Day A"
-            placeholderTextColor="#8E8E93"
+            placeholderTextColor={colors.textSecondary}
             value={name}
             onChangeText={setName}
           />
@@ -190,15 +192,15 @@ export default function CreateRoutineScreen() {
 
         {/* Exercises List */}
         <View style={styles.section}>
-          <Text style={styles.label}>Exercises</Text>
+          <Text style={[styles.label, { color: colors.textSecondary }]}>Exercises</Text>
 
           {exercises.map((ex, index) => (
-            <View key={ex.id} style={styles.exerciseCard}>
+            <View key={ex.id} style={[styles.exerciseCard, { backgroundColor: colors.card }]}>
               <View style={styles.exerciseHeader}>
                 <View style={styles.exerciseNumber}>
                   <Text style={styles.exerciseNumberText}>{index + 1}</Text>
                 </View>
-                <Text style={styles.exerciseName}>{ex.exercise.name}</Text>
+                <Text style={[styles.exerciseName, { color: colors.text }]}>{ex.exercise.name}</Text>
                 <TouchableOpacity
                   style={styles.removeButton}
                   onPress={() => removeExercise(ex.id)}
@@ -210,75 +212,95 @@ export default function CreateRoutineScreen() {
               {/* Sets */}
               <View style={styles.setsContainer}>
                 <View style={styles.setsHeader}>
-                  <Text style={styles.setsLabel}>Sets</Text>
+                  <Text style={[styles.setsLabel, { color: colors.text }]}>Sets</Text>
                   <View style={styles.setsControls}>
                     <TouchableOpacity
-                      style={styles.setControlButton}
+                      style={[styles.setControlButton, { backgroundColor: isDark ? '#3A3A3C' : '#E5E5EA' }]}
                       onPress={() => removeSet(ex.id)}
                     >
-                      <Text style={styles.setControlButtonText}>−</Text>
+                      <Text style={[styles.setControlButtonText, { color: colors.primary }]}>−</Text>
                     </TouchableOpacity>
-                    <Text style={styles.setsCount}>{ex.sets.length}</Text>
+                    <Text style={[styles.setsCount, { color: colors.text }]}>{ex.sets.length}</Text>
                     <TouchableOpacity
-                      style={styles.setControlButton}
+                      style={[styles.setControlButton, { backgroundColor: isDark ? '#3A3A3C' : '#E5E5EA' }]}
                       onPress={() => addSet(ex.id)}
                     >
-                      <Text style={styles.setControlButtonText}>+</Text>
+                      <Text style={[styles.setControlButtonText, { color: colors.primary }]}>+</Text>
                     </TouchableOpacity>
                   </View>
                 </View>
 
-                <View style={styles.setHeaderRow}>
-                  <Text style={styles.setHeaderLabel}>Set</Text>
-                  <Text style={styles.setHeaderLabel}>Weight (lbs)</Text>
-                  <Text style={styles.setHeaderLabel}>Reps</Text>
+                <View style={[styles.setHeaderRow, { borderBottomColor: colors.border }]}>
+                  <Text style={[styles.setHeaderLabel, { color: colors.textSecondary }]}>Set</Text>
+                  <Text style={[styles.setHeaderLabel, { color: colors.textSecondary }]}>Weight (lbs)</Text>
+                  <Text style={[styles.setHeaderLabel, { color: colors.textSecondary }]}>Reps</Text>
                 </View>
                 {ex.sets.map((set, setIndex) => (
-                  <View key={setIndex} style={styles.setRow}>
-                    <Text style={styles.setNumber}>{setIndex + 1}</Text>
+                  <View key={setIndex} style={[styles.setRow, { borderBottomColor: colors.border }]}>
+                    <Text style={[styles.setNumber, { color: colors.textSecondary }]}>{setIndex + 1}</Text>
                     <TextInput
-                      style={styles.weightInput}
+                      style={[styles.weightInput, { backgroundColor: isDark ? '#2C2C2E' : '#F2F2F7', color: colors.text }]}
                       keyboardType="decimal-pad"
                       placeholder="—"
-                      placeholderTextColor="#C7C7CC"
+                      placeholderTextColor={isDark ? '#636366' : '#C7C7CC'}
                       value={set.targetWeight !== null ? String(set.targetWeight) : ''}
                       onChangeText={(text) => {
                         const weight = text ? parseFloat(text) || null : null;
                         updateSetWeight(ex.id, setIndex, weight);
                       }}
                     />
-                    <TextInput
-                      style={styles.repsInput}
-                      keyboardType="number-pad"
-                      value={String(set.targetReps)}
-                      onChangeText={(text) => {
-                        const reps = parseInt(text) || 0;
-                        updateSetReps(ex.id, setIndex, reps);
-                      }}
-                    />
+                    <View style={styles.repsInputContainer}>
+                      <TouchableOpacity
+                        style={styles.repsStepperButton}
+                        onPress={() => {
+                          if (set.targetReps > 1) {
+                            updateSetReps(ex.id, setIndex, set.targetReps - 1);
+                          }
+                        }}
+                      >
+                        <Text style={styles.repsStepperText}>−</Text>
+                      </TouchableOpacity>
+                      <TextInput
+                        style={[styles.repsInput, { backgroundColor: isDark ? '#2C2C2E' : '#F2F2F7', color: colors.text }]}
+                        keyboardType="number-pad"
+                        value={String(set.targetReps)}
+                        onChangeText={(text) => {
+                          const reps = parseInt(text) || 0;
+                          updateSetReps(ex.id, setIndex, reps);
+                        }}
+                      />
+                      <TouchableOpacity
+                        style={styles.repsStepperButton}
+                        onPress={() => {
+                          updateSetReps(ex.id, setIndex, set.targetReps + 1);
+                        }}
+                      >
+                        <Text style={styles.repsStepperText}>+</Text>
+                      </TouchableOpacity>
+                    </View>
                   </View>
                 ))}
               </View>
 
               {/* Notes */}
               <TextInput
-                style={styles.notesInput}
+                style={[styles.notesInput, { backgroundColor: isDark ? '#2C2C2E' : '#F2F2F7', color: colors.text }]}
                 placeholder="Notes (e.g., 'Slow eccentric', 'Seat height 4')"
-                placeholderTextColor="#8E8E93"
+                placeholderTextColor={colors.textSecondary}
                 value={ex.notes}
                 onChangeText={(text) => updateExerciseNotes(ex.id, text)}
               />
             </View>
           ))}
 
-          <TouchableOpacity style={styles.addExerciseButton} onPress={openExercisePicker}>
-            <Text style={styles.addExerciseButtonText}>+ Add Exercise</Text>
+          <TouchableOpacity style={[styles.addExerciseButton, { borderColor: colors.primary }]} onPress={openExercisePicker}>
+            <Text style={[styles.addExerciseButtonText, { color: colors.primary }]}>+ Add Exercise</Text>
           </TouchableOpacity>
         </View>
       </ScrollView>
 
       {/* Save Button */}
-      <View style={styles.footer}>
+      <View style={[styles.footer, { backgroundColor: colors.card, borderTopColor: colors.border }]}>
         <TouchableOpacity
           style={[styles.saveButton, isSaving && styles.saveButtonDisabled]}
           onPress={handleSave}
@@ -297,20 +319,20 @@ export default function CreateRoutineScreen() {
         presentationStyle="pageSheet"
         onRequestClose={() => setShowExercisePicker(false)}
       >
-        <View style={styles.modalContainer}>
-          <View style={styles.modalHeader}>
+        <View style={[styles.modalContainer, { backgroundColor: colors.background }]}>
+          <View style={[styles.modalHeader, { backgroundColor: colors.card, borderBottomColor: colors.border }]}>
             <TouchableOpacity onPress={() => setShowExercisePicker(false)}>
-              <Text style={styles.modalCancel}>Cancel</Text>
+              <Text style={[styles.modalCancel, { color: colors.primary }]}>Cancel</Text>
             </TouchableOpacity>
-            <Text style={styles.modalTitle}>Add Exercise</Text>
+            <Text style={[styles.modalTitle, { color: colors.text }]}>Add Exercise</Text>
             <View style={{ width: 60 }} />
           </View>
 
-          <View style={styles.modalSearchContainer}>
+          <View style={[styles.modalSearchContainer, { backgroundColor: colors.card }]}>
             <TextInput
-              style={styles.modalSearchInput}
+              style={[styles.modalSearchInput, { backgroundColor: isDark ? '#2C2C2E' : '#F2F2F7', color: colors.text }]}
               placeholder="Search exercises..."
-              placeholderTextColor="#8E8E93"
+              placeholderTextColor={colors.textSecondary}
               value={searchQuery}
               onChangeText={setSearchQuery}
               autoFocus
@@ -322,11 +344,11 @@ export default function CreateRoutineScreen() {
             keyExtractor={(item) => item.id}
             renderItem={({ item }) => (
               <TouchableOpacity
-                style={styles.exercisePickerItem}
+                style={[styles.exercisePickerItem, { backgroundColor: colors.card }]}
                 onPress={() => addExercise(item)}
               >
-                <Text style={styles.exercisePickerName}>{item.name}</Text>
-                <Text style={styles.exercisePickerMeta}>
+                <Text style={[styles.exercisePickerName, { color: colors.text }]}>{item.name}</Text>
+                <Text style={[styles.exercisePickerMeta, { color: colors.textSecondary }]}>
                   {item.category} • {item.equipment}
                 </Text>
               </TouchableOpacity>
@@ -482,14 +504,33 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     marginHorizontal: 8,
   },
+  repsInputContainer: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  repsStepperButton: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: '#007AFF',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  repsStepperText: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#FFFFFF',
+  },
   repsInput: {
+    flex: 1,
     backgroundColor: '#F2F2F7',
     borderRadius: 8,
-    paddingHorizontal: 8,
+    paddingHorizontal: 4,
     paddingVertical: 8,
+    marginHorizontal: 4,
     fontSize: 16,
     fontWeight: '500',
-    flex: 1,
     textAlign: 'center',
   },
   notesInput: {

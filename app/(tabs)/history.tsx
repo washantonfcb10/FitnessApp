@@ -21,6 +21,8 @@ import {
   getScheduledWorkoutsForDate,
   scheduleWorkout,
   deleteScheduledWorkout,
+  deleteWorkout,
+  createCompletedWorkoutForDate,
   getAllRoutines,
   startWorkout,
   getWorkoutPhotos,
@@ -139,7 +141,19 @@ export default function HistoryScreen() {
   const handleScheduleRoutine = async (routine: RoutineTemplate) => {
     if (!selectedDate) return;
     try {
-      await scheduleWorkout(routine.id, selectedDate);
+      // Check if selected date is in the past
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      const selectedDateObj = new Date(selectedDate + 'T00:00:00');
+
+      if (selectedDateObj < today) {
+        // Past date - create as completed workout
+        await createCompletedWorkoutForDate(routine.id, selectedDate);
+      } else {
+        // Today or future - schedule it
+        await scheduleWorkout(routine.id, selectedDate);
+      }
+
       setShowRoutinePicker(false);
       await loadWorkoutsForDate(selectedDate);
       await loadWorkoutDates();
@@ -147,6 +161,32 @@ export default function HistoryScreen() {
       console.error('Failed to schedule workout:', error);
       Alert.alert('Error', 'Failed to schedule workout');
     }
+  };
+
+  const handleDeleteWorkout = async (workout: WorkoutSummary) => {
+    Alert.alert(
+      'Remove Workout',
+      `Remove "${workout.name}" from this day?`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Remove',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await deleteWorkout(workout.id);
+              if (selectedDate) {
+                await loadWorkoutsForDate(selectedDate);
+                await loadWorkoutDates();
+              }
+            } catch (error) {
+              console.error('Failed to delete workout:', error);
+              Alert.alert('Error', 'Failed to remove workout');
+            }
+          },
+        },
+      ]
+    );
   };
 
   const handleDeleteScheduled = async (scheduled: ScheduledWorkout) => {
@@ -384,10 +424,18 @@ export default function HistoryScreen() {
                     return (
                       <View key={workout.id} style={[styles.workoutCard, { backgroundColor: colors.card }]}>
                         <View style={styles.workoutHeader}>
-                          <Text style={[styles.workoutName, { color: colors.text }]}>{workout.name}</Text>
-                          <Text style={[styles.workoutTime, { color: colors.textSecondary }]}>
-                            {formatTime(workout.startedAt)}
-                          </Text>
+                          <View style={styles.workoutHeaderLeft}>
+                            <Text style={[styles.workoutName, { color: colors.text }]}>{workout.name}</Text>
+                            <Text style={[styles.workoutTime, { color: colors.textSecondary }]}>
+                              {formatTime(workout.startedAt)}
+                            </Text>
+                          </View>
+                          <TouchableOpacity
+                            style={styles.deleteWorkoutButton}
+                            onPress={() => handleDeleteWorkout(workout)}
+                          >
+                            <Text style={styles.deleteWorkoutText}>✕</Text>
+                          </TouchableOpacity>
                         </View>
 
                         <View style={styles.statsGrid}>
@@ -698,6 +746,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: 16,
   },
+  workoutHeaderLeft: {
+    flex: 1,
+  },
   workoutName: {
     fontSize: 17,
     fontWeight: '600',
@@ -706,6 +757,14 @@ const styles = StyleSheet.create({
   workoutTime: {
     fontSize: 14,
     color: '#8E8E93',
+  },
+  deleteWorkoutButton: {
+    padding: 8,
+    marginLeft: 8,
+  },
+  deleteWorkoutText: {
+    fontSize: 18,
+    color: '#FF3B30',
   },
   statsGrid: {
     flexDirection: 'row',

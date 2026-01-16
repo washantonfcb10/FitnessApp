@@ -374,6 +374,7 @@ export default function WorkoutScreen() {
                 key={exercise.id}
                 style={[
                   styles.exerciseCard,
+                  { backgroundColor: colors.card },
                   isSuperset && styles.supersetExerciseCard,
                   isSuperset && exerciseIndex > 0 && styles.supersetExerciseCardConnected,
                 ]}
@@ -393,8 +394,8 @@ export default function WorkoutScreen() {
                       </View>
                     )}
                     <View>
-                      <Text style={styles.exerciseName}>{exercise.exercise.name}</Text>
-                      <Text style={styles.exerciseProgress}>
+                      <Text style={[styles.exerciseName, { color: colors.text }]}>{exercise.exercise.name}</Text>
+                      <Text style={[styles.exerciseProgress, { color: colors.textSecondary }]}>
                         {completedSets}/{currentInputs.length} sets
                       </Text>
                     </View>
@@ -402,19 +403,19 @@ export default function WorkoutScreen() {
                 </View>
 
                 {exercise.notes && (
-                  <View style={styles.notesContainer}>
-                    <Text style={styles.notesText}>{exercise.notes}</Text>
+                  <View style={[styles.notesContainer, { backgroundColor: isDark ? '#3A3000' : '#FFF9E6' }]}>
+                    <Text style={[styles.notesText, { color: isDark ? '#FFD60A' : '#8B6914' }]}>{exercise.notes}</Text>
                   </View>
                 )}
 
                 {/* Sets */}
                 <View style={styles.setsContainer}>
-                  <View style={styles.setsHeader}>
-                    <Text style={styles.setsHeaderCell}>Set</Text>
-                    <Text style={styles.setsHeaderCell}>Previous</Text>
-                    <Text style={styles.setsHeaderCellWide}>Weight</Text>
-                    <Text style={styles.setsHeaderCellWide}>Reps</Text>
-                    <Text style={styles.setsHeaderCell}></Text>
+                  <View style={[styles.setsHeader, { borderBottomColor: colors.border }]}>
+                    <Text style={[styles.setsHeaderCell, { color: colors.textSecondary }]}>Set</Text>
+                    <Text style={[styles.setsHeaderCell, { color: colors.textSecondary }]}>Previous</Text>
+                    <Text style={[styles.setsHeaderCellWide, { color: colors.textSecondary }]}>Weight</Text>
+                    <Text style={[styles.setsHeaderCellWide, { color: colors.textSecondary }]}>Reps</Text>
+                    <Text style={[styles.setsHeaderCell, { color: colors.textSecondary }]}></Text>
                   </View>
 
                   {currentInputs.map((input, setIndex) => {
@@ -424,30 +425,66 @@ export default function WorkoutScreen() {
                     return (
                       <View
                         key={setIndex}
-                        style={[styles.setRow, input.completed && styles.setRowCompleted]}
+                        style={[
+                          styles.setRow,
+                          { borderBottomColor: colors.border },
+                          input.completed && (isDark ? styles.setRowCompletedDark : styles.setRowCompleted),
+                        ]}
                       >
-                        <Text style={styles.setNumber}>{setIndex + 1}</Text>
-                        <Text style={styles.previousValue}>
+                        <Text style={[styles.setNumber, { color: colors.text }]}>{setIndex + 1}</Text>
+                        <Text style={[styles.previousValue, { color: colors.textSecondary }]}>
                           {lastSet ? `${lastSet.weight}×${lastSet.reps}` : '-'}
                         </Text>
                         <TextInput
-                          style={[styles.setInput, input.completed && styles.setInputCompleted]}
+                          style={[
+                            styles.setInput,
+                            { backgroundColor: isDark ? '#2C2C2E' : '#F2F2F7', color: colors.text },
+                            input.completed && (isDark ? styles.setInputCompletedDark : styles.setInputCompleted),
+                          ]}
                           keyboardType="decimal-pad"
                           value={input.weight}
                           onChangeText={(v) => updateSetInput(exercise.id, setIndex, 'weight', v)}
                           editable={!input.completed}
                           placeholder="0"
-                          placeholderTextColor="#C7C7CC"
+                          placeholderTextColor={isDark ? '#636366' : '#C7C7CC'}
                         />
-                        <TextInput
-                          style={[styles.setInput, input.completed && styles.setInputCompleted]}
-                          keyboardType="number-pad"
-                          value={input.reps}
-                          onChangeText={(v) => updateSetInput(exercise.id, setIndex, 'reps', v)}
-                          editable={!input.completed}
-                          placeholder="0"
-                          placeholderTextColor="#C7C7CC"
-                        />
+                        <View style={styles.repsInputContainer}>
+                          <TouchableOpacity
+                            style={[styles.repsStepperButton, input.completed && styles.repsStepperButtonDisabled]}
+                            onPress={() => {
+                              const currentReps = parseInt(input.reps) || 0;
+                              if (currentReps > 1) {
+                                updateSetInput(exercise.id, setIndex, 'reps', String(currentReps - 1));
+                              }
+                            }}
+                            disabled={input.completed}
+                          >
+                            <Text style={[styles.repsStepperText, input.completed && styles.repsStepperTextDisabled]}>−</Text>
+                          </TouchableOpacity>
+                          <TextInput
+                            style={[
+                              styles.repsInput,
+                              { backgroundColor: isDark ? '#2C2C2E' : '#F2F2F7', color: colors.text },
+                              input.completed && (isDark ? { backgroundColor: '#1B3D1B' } : styles.repsInputCompleted),
+                            ]}
+                            keyboardType="number-pad"
+                            value={input.reps}
+                            onChangeText={(v) => updateSetInput(exercise.id, setIndex, 'reps', v)}
+                            editable={!input.completed}
+                            placeholder="8"
+                            placeholderTextColor={isDark ? '#636366' : '#C7C7CC'}
+                          />
+                          <TouchableOpacity
+                            style={[styles.repsStepperButton, input.completed && styles.repsStepperButtonDisabled]}
+                            onPress={() => {
+                              const currentReps = parseInt(input.reps) || 0;
+                              updateSetInput(exercise.id, setIndex, 'reps', String(currentReps + 1));
+                            }}
+                            disabled={input.completed}
+                          >
+                            <Text style={[styles.repsStepperText, input.completed && styles.repsStepperTextDisabled]}>+</Text>
+                          </TouchableOpacity>
+                        </View>
                         {input.completed ? (
                           <View style={styles.checkContainer}>
                             <Text style={styles.checkmark}>✓</Text>
@@ -476,15 +513,20 @@ export default function WorkoutScreen() {
       </ScrollView>
 
       {/* Navigation Footer */}
-      <View style={styles.footer}>
+      <View style={[styles.footer, { backgroundColor: colors.card, borderTopColor: colors.border }]}>
         <TouchableOpacity
-          style={[styles.navButton, currentGroupIndex === 0 && styles.navButtonDisabled]}
+          style={[
+            styles.navButton,
+            { backgroundColor: isDark ? '#3A3A3C' : '#E5E5EA' },
+            currentGroupIndex === 0 && styles.navButtonDisabled,
+          ]}
           onPress={goToPrevGroup}
           disabled={currentGroupIndex === 0}
         >
           <Text
             style={[
               styles.navButtonText,
+              { color: colors.text },
               currentGroupIndex === 0 && styles.navButtonTextDisabled,
             ]}
           >
@@ -736,6 +778,9 @@ const styles = StyleSheet.create({
   setRowCompleted: {
     backgroundColor: '#F0FFF4',
   },
+  setRowCompletedDark: {
+    backgroundColor: '#0D2818',
+  },
   setNumber: {
     width: 50,
     fontSize: 16,
@@ -761,6 +806,49 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   setInputCompleted: {
+    backgroundColor: '#E8F5E9',
+  },
+  setInputCompletedDark: {
+    backgroundColor: '#1B3D1B',
+  },
+  repsInputContainer: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginHorizontal: 4,
+  },
+  repsStepperButton: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: '#007AFF',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  repsStepperButtonDisabled: {
+    backgroundColor: '#8E8E93',
+    opacity: 0.5,
+  },
+  repsStepperText: {
+    fontSize: 20,
+    fontWeight: '600',
+    color: '#FFFFFF',
+  },
+  repsStepperTextDisabled: {
+    color: '#C7C7CC',
+  },
+  repsInput: {
+    flex: 1,
+    backgroundColor: '#F2F2F7',
+    borderRadius: 8,
+    paddingHorizontal: 6,
+    paddingVertical: 10,
+    marginHorizontal: 6,
+    fontSize: 16,
+    fontWeight: '500',
+    textAlign: 'center',
+  },
+  repsInputCompleted: {
     backgroundColor: '#E8F5E9',
   },
   checkContainer: {
